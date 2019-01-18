@@ -218,6 +218,7 @@
 #   28000 (18'b10_1000_0000_0000_0000): disable
 #   28001 (18'b10_1000_0000_0000_0001): enable
 #   29000 (18'b10_1001_0000_0000_0000): returni
+#   2B000 (18'b10_1011_0000_0000_0000): outputk
 #   2C000 (18'b10_1100_0000_0000_0000): output
 #   2E000 (18'b10_1110_0000_0000_0000): store
 #
@@ -305,6 +306,8 @@
 #   +---------+-+-------+-------------+-+
 #   |1 0 1 1 0|1|x x x x|k k k k k k k k| output sX, kk
 #   |         |0|       |y y y y 0 0 0 0| output sX, sY
+#   +---------+-+-------+---------------+
+#   |1 0 1 1 0 1|k k k k k k k k|p p p p| outputk kk, p
 #   +---------+-+-------+---------------+
 #   |1 0 1 1 1|1|x x x x|k k k k k k k k| store  sX, kk
 #   |         |0|       |y y y y 0 0 0 0| store  sX, sY
@@ -814,8 +817,17 @@ def _assembly_alu(opcode, instruction, cfg):
     KK = instruction[2]
 
     objhex = opcode
-    objhex = objhex | (_parse_register_name(sX) << 8)
 
+    if opcode == 0x2B000:
+        if type(sX) != types.IntType and types(sY) != types.IntType:
+            raise PSMPPException('Unknown types of parameters')
+        if sY > 15:
+            raise PSMPPException('Parameter out of bounds')
+        objhex = objhex | (sX << 4) | sY
+        return objhex
+
+    objhex = objhex | (_parse_register_name(sX) << 8)
+        
     if type(sY) == types.IntType:
         objhex = objhex | KK
     elif type(sY) == types.StringType:
@@ -960,6 +972,7 @@ def _get_kcpsm6_assembler():
         'comparecy' :(0x1E000, _assembly_alu),# subcy
 
         'output'    :(0x2C000, _assembly_alu),
+        'outputk'   :(0x2B000, _assembly_alu),
         'store'     :(0x2E000, _assembly_alu),
 
         'call'      :(0x20000, _assembly_control),

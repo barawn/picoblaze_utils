@@ -8,6 +8,7 @@ typedef uint8_t bool_t;
 //I/O
 extern void input(uint8_t addr, uint8_t* reg);
 extern void output(uint8_t addr, uint8_t* reg);
+extern void outputk(uint8_t addr, uint8_t* reg);
 
 extern void fetch(uint8_t addr, uint8_t* reg);
 extern void store(uint8_t addr, uint8_t* reg);

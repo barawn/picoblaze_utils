@@ -108,13 +108,17 @@ def popen(args, stdin=None):
 
 def _parse_param(param):
     param = re.sub(r'[ ]+', '', param)
-
+    print "parsing"
+    print param
     if len(param) == 0:
         return param
     elif re.match(r'^s[0-9A-F]$', param):
         return param
     elif re.match(r'^[&]s[0-9A-F]$', param):
         return param[1:]
+    elif re.match(r'^s[0-9A-F].s[0-9A-F]$',param):
+        print "match double register"
+        return param
     else:
         try:
             res = {'val':0}
@@ -327,13 +331,16 @@ def parse_assign(info, line):
     return False 
 
 def parse_funcdecl(info, line):
+    print "Parsing %s" % line
     #ignore normal function declare
     if re.match(r'(\w+) (\w+)\(([^\(\)]*)\);$', line):
+        print "not a function"
         return True
 
     #parse __attribute__ ((...))
     res = re.match(r'(\w+) (\w+)\((.*)\) (.*);$', line)
     if info.level == 0 and res:
+        print "found function"
         ret = res.groups()[0]
         name = res.groups()[1]
         params = res.groups()[2]
@@ -345,10 +352,12 @@ def parse_funcdecl(info, line):
     return False 
 
 def parse_funcdef(info, line):
+    print "parsing %s" % line
     line = re.sub(r'[; ]+$', '', line)
-
+    print "subbed to %s" % line
     res = re.match(r'(\w+) (\w+)\((.*)\)$', line)
     if info.level == 0 and res:
+        print "function"
         ret = res.groups()[0]
         name = res.groups()[1]
         params = res.groups()[2]
@@ -372,7 +381,7 @@ def parse_funccall(info, line):
             info.lines.append([info.level, info.lineno, 'funccall', [fun]])
             return True
 
-        if fun in ['input', 'output', 'store', 'fetch']:
+        if fun in ['input', 'output', 'outputk', 'store', 'fetch']:
             info.lines.append([info.level, info.lineno, 'funccall',
                 [fun, _parse_param_list(params)]])
         else:
@@ -881,24 +890,34 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
     isr_table = {}
     isr_routine = {}
 
+    for name in map_function:
+        print "Found function: %s" % name
+    
     #boot section
     f.write(';%s' % ('-' * 60))
     f.write('\n')
     f.write('address 0x000')
     f.write('\n')
-    f.write('boot:')
-    f.write('\n')
+    #support init/no init style
+    keylist = map_function.keys()
+    if "init" in map_function.keys():
+        f.write('boot:')
+        f.write('\n')    
+        f.write('  call init')
+        f.write('\n')
+    #support loop/no loop style
+    if "loop" in map_function.keys():
+        # loop is present, sort it first
+        keylist.insert(0,keylist.pop(keylist.index("loop")))
+    else:
+        f.write('loop:')
+        f.write('\n')    
+        f.write('  jump loop')
+        f.write('\n')
 
-    f.write('  call init')
     f.write('\n')
-
-    f.write('loop:')
-    f.write('\n')
-    f.write('  jump loop')
-    f.write('\n')
-    f.write('\n')
-
-    for name in map_function:
+    
+    for name in keylist:
         lst_block = map_function[name]
         label_end = '_end_%s' % name
 
@@ -1030,7 +1049,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         f.write('  ' * level)
                         f.write('  %s' % code[0].replace('_', ' '))
                         f.write('\n')
-                    elif code[0] in ['input', 'output', 'fetch', 'store']:
+                    elif code[0] in ['input', 'output', 'outputk', 'fetch', 'store']:
                         if type(code[1][0]) == types.IntType:
                             f.write('  ' * level)
                             f.write('  %s %s, %d' % (code[0], code[1][1], code[1][0]))
@@ -1105,8 +1124,29 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
 
                     f.write('  ' * level)
                     if compare in ['==', '!=', '<', '>=']:
-                        f.write('  compare %s, %s' % (str(param0), str(param1)))
-                    elif compare in ['&']:
+                        # check double register compare
+                        if len(param0.split('.')) == 2:                        
+                            print "double register compare"
+                            regs = param0.split('.')
+                            operands = []
+                            print type(param1)
+                            if type(param1) == str:
+                                print "register/register compare"
+                                if len(param1.split('.')) != 2:
+                                    msg = 'Paired registers operations need pairs of operands "%s"' % (str(line))
+                                    raise ParseException(msg)
+                                operands = param1.split('.')
+                            else:
+                                operands = [ (param1>>8)&0xFF, param1 & 0xFF ]
+                            f.write('  compare %s, %s' % (regs[1], str(operands[1])))
+                            f.write('\n')
+                            f.write('  ' * level)
+                            f.write('  comparecy %s, %s' % (regs[0], str(operands[0])))
+                            f.write('\n')
+                        else:
+                            f.write('  compare %s, %s' % (str(param0), str(param1)))
+                    # |^ is an inverted bit test
+                    elif compare in ['&','|^']:
                         f.write('  test %s, %s' % (str(param0), str(param1)))
                     f.write('\n')
 
@@ -1127,6 +1167,9 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     elif compare == '&':
                         flage_t = 'NZ'
                         flage_f = 'Z'
+                    elif compare == '|^':
+                        flage_t = 'Z'
+                        flage_f = 'NZ'
                     else:
                         msg = 'Not support "%s"' % str(line)
                         raise ParseException(msg)
@@ -1188,7 +1231,80 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     assign_type = code[0]
                     param0  = code[1]
                     param1  = code[2]
-                    if assign_type == '=':
+                    if len(param0.split('.')) == 2:
+                        # paired register math
+                        print "paired register assembly"
+                        regs = param0.split('.')
+                        operands = []
+                        print type(param1)
+                        if type(param1) == str:
+                            print "register/register operation"
+                            if len(param1.split('.')) != 2:
+                                msg = 'Paired registers operations need pairs of operands "%s"' % (str(line))
+                                raise ParseException(msg)
+                            operands = param1.split('.')
+                        else:
+                            operands = [ (param1>>8)&0xFF, param1 & 0xFF ]
+                        if assign_type == '=':
+                            f.write('  ' * level)
+                            f.write('  move %s, %s' % (regs[1], str(operands[1])))
+                            f.write('\n')
+                            f.write('  ' * level)
+                            f.write('  move %s, %s' % (regs[0], str(operands[0])))
+                            f.write('\n')
+                        elif assign_type == '+=':
+                            f.write('  ' * level)
+                            f.write('  add %s, %s' % (regs[1], str(operands[1])))
+                            f.write('\n')
+                            f.write('  ' * level)
+                            f.write('  addcy %s, %s' % (regs[0], str(operands[0])))
+                        elif assign_type == '-=':
+                            f.write('  ' * level)
+                            f.write('  sub %s, %s' % (regs[1], str(operands[1])))
+                            f.write('\n')
+                            f.write('  ' * level)
+                            f.write('  subcy %s, %s' % (regs[0], str(operands[0])))
+                        elif assign_type == '<<=':
+                            if type(operands[0]) == str:
+                                msg = 'Shifts must be a constant value'
+                                raise ParseException(msg)
+                            while param1 > 0:
+                                f.write('  ' * level)
+                                f.write('  sl0 %s' % regs[1])
+                                f.write('\n')
+                                f.write('  ' * level)
+                                f.write('  sla %s' % regs[0])
+                                f.write('\n')
+                                param1 -= 1
+                        elif assign_type == '>>=':
+                            if type(operands[0]) == str:
+                                msg = 'Shifts must be a constant value'
+                                raise ParseException(msg)
+                            while param1 > 0:
+                                f.write('  ' * level)
+                                f.write('  sr0 %s' % regs[0])
+                                f.write('\n')
+                                f.write('  ' * level)
+                                f.write('  sra %s' % regs[1])
+                                f.write('\n')
+                                param1 -= 1
+                        elif assign_type == '&=' or assign_type == '|=' or assign_type == '^=':
+                            if assign_type == '&=':
+                                op = 'and'
+                            elif assign_type == '|=':
+                                op = 'or'
+                            elif assign_type == '^=':
+                                op = 'xor'
+                            f.write('  ' * level)
+                            f.write('  %s %s, %s' % (op, regs[1], str(operands[1])))
+                            f.write('\n')
+                            f.write('  ' * level)
+                            f.write('  %s %s, %s' % (op, regs[0], str(operands[0])))
+                            f.write('\n')
+                        else:
+                            msg = 'Unknown operator "%s"' % (str(line))
+                            raise ParseException(msg)                            
+                    elif assign_type == '=':
                         f.write('  ' * level)
                         f.write('  move %s, %s' % (param0, str(param1)))
                         f.write('\n')
@@ -1259,6 +1375,8 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
             f.write('  move sF, %d\n' % isr_clr_data)
             f.write('  output sF, %d\n' % (BASEADDR_INTC_CLEAR + isr_clr_addr))
             f.write('  returni enable')
+        elif name == "loop":
+            f.write('  jump loop')
         else:
             f.write('  return')
         f.write('\n')
@@ -1340,8 +1458,10 @@ if __name__ == '__main__':
                 args.append('-I')
                 args.append(path)
             
-        args.extend(['-e', 'utf-8', '-z', lst_args[0]])
-
+#        args.extend(['-e', 'utf-8', '-z', lst_args[0]])
+        args.extend(['-e', 'utf-8', '-D', 'PBLAZE_CC', lst_args[0]])
+        for arg in args:
+            print "preprocessor: %s" % arg
         (returncode, stdout_text, stderr_text) = popen(args)
         if returncode == 0:
             if '-g' in map_options:
