@@ -1315,9 +1315,21 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             f.write('  ' * level)
                             f.write('  %s %s, %s' % (op, regs[1], str(operands[1])))
                             f.write('\n')
-                            f.write('  ' * level)
-                            f.write('  %s %s, %s' % (op, regs[0], str(operands[0])))
-                            f.write('\n')
+                            # Figure out if we need two operations or just one.
+                            need_second_op = True
+                            if type(operands[1]) == str:
+                                need_second_op = True
+                            elif op == 'and' and operands[1] == 255:
+                                need_second_op = False
+                            elif op == 'or' and operands[1] == 0:
+                                need_second_op = False
+                            elif op == 'xor' and operands[1] == 0:
+                                need_second_op = False
+
+                            if need_second_op == True:
+                                f.write('  ' * level)
+                                f.write('  %s %s, %s' % (op, regs[0], str(operands[0])))
+                                f.write('\n')
                         else:
                             msg = 'Unknown operator "%s"' % (str(line))
                             raise ParseException(msg)                            
