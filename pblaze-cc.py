@@ -112,6 +112,8 @@ def _parse_param(param):
     print param
     if len(param) == 0:
         return param
+    elif re.match(r'[Z|C]', param):
+        return param
     elif re.match(r'^s[0-9A-F]$', param):
         return param
     elif re.match(r'^[&]s[0-9A-F]$', param):
@@ -1094,6 +1096,8 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     param0  = code[1]
                     param1  = code[2]
 
+                    print "compare ", compare, " param0 ", param0, " param1 ", param1
+                    
                     #check if const value
                     if type(param0) == types.IntType and \
                             type(param1) == types.IntType:
@@ -1124,8 +1128,13 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
 
                     f.write('  ' * level)
                     if compare in ['==', '!=', '<', '>=']:
+                        if param0 == 'Z' or param0 == 'C':
+                            print "condition check: ", param0, compare, param1
+                            if param1 != 0 or compare == '<' or compare == '>=':
+                                msg = 'Condition checks are only == 0 or != 0'
+                                raise ParseException(msg)                                
                         # check double register compare
-                        if len(param0.split('.')) == 2:                        
+                        elif len(param0.split('.')) == 2:                        
                             print "double register compare"
                             regs = param0.split('.')
                             operands = []
@@ -1151,7 +1160,15 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     f.write('\n')
 
                     #compare
-                    if compare == '==':
+                    if param0 =='Z' or param0 == 'C':
+                        if compare == '==':
+                            # equal zero
+                            flag_t = 'N'+param0
+                            flag_f = param0
+                        else:
+                            flag_t = param0
+                            flag_f = 'N'+param0
+                    elif compare == '==':
                         flage_t = 'Z'
                         flage_f = 'NZ'
                     elif compare == '!=':
