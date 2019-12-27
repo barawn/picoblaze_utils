@@ -50,6 +50,8 @@ IDX_LINENO  = 1
 IDX_TYPE    = 2
 IDX_CODE    = 3
 
+labels = []
+
 class MetaInfo(object):
     def __init__(self):
         self.level = 0
@@ -242,13 +244,36 @@ def parse_condition(info, line):
         info.lines.append([info.level, info.lineno, 'else', []])
         return True
 
+    #fmt: if (--var)
+    res = re.match(r'(if|else if|while) \(--\s*(.+)\)', line)
+    if res:
+        cond = res.groups()[0]
+        param0 = res.groups()[1]
+        compare = '--'
+        param1 = '0'
+
+        if cond == 'while' and end_while:
+            info.lines.append([info.level, info.lineno, 'dowhile',
+                [compare, _parse_param(param0), _parse_param(param1)]])
+            return True        
+
+        info.lines.append([info.level, info.lineno, cond,
+            [compare, _parse_param(param0), _parse_param(param1)]])
+        return True
+    
     #fmt: if (!var)
-    res = re.match(r'(if|else if|while) \(! (.+)\)', line)
+    res = re.match(r'(if|else if|while) \(!\s*(.+)\)', line)
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
         compare = '=='
         param1  = '0'
+
+        if cond == 'while' and end_while:
+            info.lines.append([info.level, info.lineno, 'dowhile',
+                [compare, _parse_param(param0), _parse_param(param1)]])
+            return True
+
         info.lines.append([info.level, info.lineno, cond,
             [compare, _parse_param(param0), _parse_param(param1)]])
         return True
@@ -332,15 +357,29 @@ def parse_assign(info, line):
 
     return False 
 
+def parse_label(info, line):
+    print "Parsing %s" % line
+    res = re.match(r'(\w+)\s*:', line)
+    if res:
+        print "found label"
+        ret = None
+        name = res.groups()[0]
+        params = None
+        attributes = None
+        labels.append(name)
+        info.lines.append([info.level, info.lineno, 'label',
+                           [name, ret, params, attributes]])
+        return True
+
 def parse_funcdecl(info, line):
     print "Parsing %s" % line
     #ignore normal function declare
-    if re.match(r'(\w+) (\w+)\(([^\(\)]*)\);$', line):
+    if re.match(r'(\w+) (\w+)\s*\(([^\(\)]*)\);$', line):
         print "not a function"
         return True
 
     #parse __attribute__ ((...))
-    res = re.match(r'(\w+) (\w+)\((.*)\) (.*);$', line)
+    res = re.match(r'(\w+) (\w+)\s*\((.*)\) (.*);$', line)
     if info.level == 0 and res:
         print "found function"
         ret = res.groups()[0]
@@ -357,7 +396,7 @@ def parse_funcdef(info, line):
     print "parsing %s" % line
     line = re.sub(r'[; ]+$', '', line)
     print "subbed to %s" % line
-    res = re.match(r'(\w+) (\w+)\((.*)\)$', line)
+    res = re.match(r'(\w+) (\w+)\s*\((.*)\)$', line)
     if info.level == 0 and res:
         print "function"
         ret = res.groups()[0]
@@ -383,7 +422,7 @@ def parse_funccall(info, line):
             info.lines.append([info.level, info.lineno, 'funccall', [fun]])
             return True
 
-        if fun in ['input', 'output', 'outputk', 'store', 'fetch']:
+        if fun in ['input', 'output', 'outputk', 'store', 'fetch', 'test']:
             info.lines.append([info.level, info.lineno, 'funccall',
                 [fun, _parse_param_list(params)]])
         else:
@@ -409,6 +448,7 @@ def parse(text):
             parse_funcdecl,
             parse_funcdef,
             parse_funccall,
+            parse_label
     ]
 
     #parse codes
@@ -965,12 +1005,20 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
             f.write('\n')
 
             for line in block:
+                print line
                 level, lineno, t, code = line
 
                 if t not in ['file']:
                     f.write(' ;%s:%d' % (fn_source, lineno))
                     f.write('\n')
 
+                #code fmt label
+                if t in ['label']:
+                    f.write('  '*level)
+                    f.write('  %s:' % code[0]) 
+                    f.write('\n')
+                    continue
+                
                 #code fmt endwhile: do_label
                 if t in ['endwhile']:
                     f.write('  '*level)
@@ -1083,7 +1131,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         f.write('  ' * level)
                         f.write('  %s' % inline_asm)
                         f.write('\n')
-                    elif code[0] in map_function:
+                    elif code[0] in labels or code[0] in map_function:
                         f.write('  ' * level)
                         f.write('  call %s' % code[0])
                         f.write('\n')
@@ -1126,7 +1174,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             (t, param0, compare, param1, label_t, label_f))
                     f.write('\n')
 
-                    f.write('  ' * level)
+                    f.write('  ' * level)                        
                     if compare in ['==', '!=', '<', '>=']:
                         if param0 == 'Z' or param0 == 'C':
                             print "condition check: ", param0, compare, param1
@@ -1151,23 +1199,34 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             f.write('\n')
                             f.write('  ' * level)
                             f.write('  comparecy %s, %s' % (regs[0], str(operands[0])))
-                            f.write('\n')
                         else:
                             f.write('  compare %s, %s' % (str(param0), str(param1)))
                     # |^ is an inverted bit test
                     elif compare in ['&','|^']:
                         f.write('  test %s, %s' % (str(param0), str(param1)))
+                    elif compare in ['--']:
+                        if len(param0.split('.')) == 2:
+                            print "double register subtract-test"
+                            regs = param0.split('.')
+                            f.write('  sub %s, 1' % (str(regs[1])))
+                            f.write('\n')
+                            f.write('  ' * level)
+                            f.write('  subcy %s, 1' % (str(regs[0])))
+                        else:
+                            print "subtract-test"
+                            f.write('  sub %s, 1' % (str(param0)))
+                        
                     f.write('\n')
 
                     #compare
                     if param0 =='Z' or param0 == 'C':
                         if compare == '==':
                             # equal zero
-                            flag_t = 'N'+param0
-                            flag_f = param0
+                            flage_t = 'N'+param0
+                            flage_f = param0
                         else:
-                            flag_t = param0
-                            flag_f = 'N'+param0
+                            flage_t = param0
+                            flage_f = 'N'+param0
                     elif compare == '==':
                         flage_t = 'Z'
                         flage_f = 'NZ'
@@ -1185,6 +1244,9 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         flage_t = 'NZ'
                         flage_f = 'Z'
                     elif compare == '|^':
+                        flage_t = 'Z'
+                        flage_f = 'NZ'
+                    elif compare == '--':
                         flage_t = 'Z'
                         flage_f = 'NZ'
                     else:
@@ -1406,6 +1468,9 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
             f.write('  returni enable')
         elif name == "loop":
             f.write('  jump loop')
+        elif name in labels:
+            # do nothing, it's a label, it has no return
+            pass
         else:
             f.write('  return')
         f.write('\n')
