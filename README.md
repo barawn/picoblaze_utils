@@ -6,6 +6,43 @@ picoblaze c-compiler and assembly and linker writing in python.
 
 This is easy assembly like c style, not really c!
 
+Edit, by PSA: To be clear, this is DEFINITELY not C, it's just
+more readable than assembly, and the C preprocessor is
+more powerful than the KCPSM assembler. Don't do anything other
+than basic operations or tests: that is, if (a < b), not
+if ( (a + b) < c). Basically, just think in your head - is this
+going to need to create a temporary? If so, it won't work.
+That's what a compiler is for.
+
+PicoBlaze (like most processors) only has 2-operand operations,
+so keep that in mind: don't do "A = B + C", that's a 3-operand
+operation (don't even do "A = A + B", do "A += B").
+
+Added a few "pseudo-C" symbols to fill out
+what can be done. First, added double operand operations
+for registers: so something like
+```c
+sA.sB = 0x1000;
+```
+with the registers ordered MSB/LSB. This works for all
+operations (add/subtract/compare), including "sA.sB += sC.sD".
+
+Next, added |^ to round out the test operations.
+We have all the "compare/comparecy" options
+(less than/greater than/equals), and C has
+a "bitwise and" test (if (a&b)) which tests if a bit
+is set. But we don't have a simple operation for
+if a bit is NOT set. In C we would do "if (!(a & b))"
+or "if ((a & b)==0)" but recognizing this in Python
+is beyond what I can do. So instead I just created
+a new operator ( |^ ), which is an inverted bit test.
+
+That is, (a |^ b) is true if !(a & b). The symbol's
+relatively meaningless, it probably would've made sense
+to use &~ or ~&, but that's got & in it too.
+
+This is only a compare operand!
+
 You can use macro, this python depend on mcpp(preprocessor) and astyle(style formater).
 
 mcpp: http://mcpp.sourceforge.net/
