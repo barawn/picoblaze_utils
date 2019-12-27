@@ -965,12 +965,14 @@ def _get_kcpsm6_assembler():
         'rr'        :(0x1400C, _assembly_shift),
         'sr0'       :(0x1400E, _assembly_shift),
         'sr1'       :(0x1400F, _assembly_shift),
+# hwbuild looks like a shift
+        'hwbuild'   :(0x14080, _assembly_shift),
 
         'sub'       :(0x18000, _assembly_alu),
         'subcy'     :(0x1A000, _assembly_alu),
         'compare'   :(0x1C000, _assembly_alu),# sub
         'comparecy' :(0x1E000, _assembly_alu),# subcy
-
+                       
         'output'    :(0x2C000, _assembly_alu),
         'outputk'   :(0x2B000, _assembly_alu),
         'store'     :(0x2E000, _assembly_alu),
@@ -981,7 +983,7 @@ def _get_kcpsm6_assembler():
         'disable'   :(0x28000, _assembly_control),
         'enable'    :(0x28001, _assembly_control),
         'returni'   :(0x29000, _assembly_control),
-
+                       
         'inst'      :(0, lambda opcode, insts, cfg: insts[1])
     }
     return (kcpsm6_cond, kcpsm6_opcodes)
