@@ -19,13 +19,16 @@ so keep that in mind: don't do "A = B + C", that's a 3-operand
 operation (don't even do "A = A + B", do "A += B").
 
 Added a few "pseudo-C" symbols to fill out
-what can be done. First, added double operand operations
+what can be done. First, added multi-operand operations
 for registers: so something like
 ```c
 sA.sB = 0x1000;
 ```
-with the registers ordered MSB/LSB. This works for all
-operations (add/subtract/compare), including "sA.sB += sC.sD".
+with the registers ordered MSB-first. This works for all
+operations (add/subtract/compare/bitwise), including "sA.sB += sC.sD".
+Pointless bitwise operations will be trimmed, so "sA.sB |= 0x1000;"
+will be trimmed to sA |= 0x10.
+
 
 Next, added |^ to round out the test operations.
 We have all the "compare/comparecy" options
