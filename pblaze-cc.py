@@ -120,8 +120,8 @@ def _parse_param(param):
         return param
     elif re.match(r'^[&]s[0-9A-F]$', param):
         return param[1:]
-    elif re.match(r'^s[0-9A-F].s[0-9A-F]$',param):
-        print "match double register"
+    elif re.match(r'^(s[0-9A-F].)*s[0-9A-F]$',param):
+        print "match multi-register"
         return param
     else:
         try:
@@ -253,6 +253,7 @@ def parse_condition(info, line):
         param1 = '0'
 
         if cond == 'while' and end_while:
+            print "while and end_while"
             info.lines.append([info.level, info.lineno, 'dowhile',
                 [compare, _parse_param(param0), _parse_param(param1)]])
             return True        
@@ -1182,36 +1183,50 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                 msg = 'Condition checks are only == 0 or != 0'
                                 raise ParseException(msg)                                
                         # check double register compare
-                        elif len(param0.split('.')) == 2:                        
-                            print "double register compare"
+                        # I should extend this to arbitrary length.
+                        elif len(param0.split('.')) > 1:
                             regs = param0.split('.')
+                            # reverse the regs order, since they're specified MSB-first
+                            regs.reverse()
                             operands = []
-                            print type(param1)
+                            nregs = len(param0.split('.'))
+                            print "multi-register compare: %d regs" % nregs
                             if type(param1) == str:
-                                print "register/register compare"
-                                if len(param1.split('.')) != 2:
-                                    msg = 'Paired registers operations need pairs of operands "%s"' % (str(line))
+                                if len(param1.split('.')) != nregs:
+                                    msg = 'Multi-register operations need equal # of operands "%s"' % (str(line))
                                     raise ParseException(msg)
                                 operands = param1.split('.')
+                                # reverse operands order
+                                operands.reverse()
                             else:
-                                operands = [ (param1>>8)&0xFF, param1 & 0xFF ]
-                            f.write('  compare %s, %s' % (regs[1], str(operands[1])))
-                            f.write('\n')
-                            f.write('  ' * level)
-                            f.write('  comparecy %s, %s' % (regs[0], str(operands[0])))
+                                for num in range(nregs):
+                                    operands.append((param1 >> 8*num) & 0xFF)
+                            print "regs: ", regs
+                            print "operands: ", operands
+                            for num in range(nregs):
+                                if num == 0:
+                                    f.write('  compare %s, %s' % (regs[num], str(operands[num])))
+                                else:
+                                    f.write('\n')
+                                    f.write('  ' * level)
+                                    f.write('  comparecy %s, %s' % (regs[num], str(operands[num])))        
                         else:
                             f.write('  compare %s, %s' % (str(param0), str(param1)))
                     # |^ is an inverted bit test
                     elif compare in ['&','|^']:
                         f.write('  test %s, %s' % (str(param0), str(param1)))
                     elif compare in ['--']:
-                        if len(param0.split('.')) == 2:
-                            print "double register subtract-test"
+                        if len(param0.split('.')) > 1:
+                            print "multi register subtract-test"
                             regs = param0.split('.')
-                            f.write('  sub %s, 1' % (str(regs[1])))
-                            f.write('\n')
-                            f.write('  ' * level)
-                            f.write('  subcy %s, 1' % (str(regs[0])))
+                            regs.reverse()
+                            for num in range(len(regs)):
+                                if num == 0:                                    
+                                    f.write('  sub %s, 1' % (str(regs[num])))
+                                else:
+                                    f.write('\n')
+                                    f.write('  ' * level)
+                                    f.write('  subcy %s, 1' % (str(regs[0])))
                         else:
                             print "subtract-test"
                             f.write('  sub %s, 1' % (str(param0)))
@@ -1310,62 +1325,70 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     assign_type = code[0]
                     param0  = code[1]
                     param1  = code[2]
-                    if len(param0.split('.')) == 2:
+                    if len(param0.split('.')) > 1:
                         # paired register math
-                        print "paired register assembly"
+                        print "multi register assembly"
                         regs = param0.split('.')
+                        regs.reverse()
+                        nregs = len(regs)
                         operands = []
                         print type(param1)
                         if type(param1) == str:
                             print "register/register operation"
-                            if len(param1.split('.')) != 2:
+                            if len(param1.split('.')) != nregs:
                                 msg = 'Paired registers operations need pairs of operands "%s"' % (str(line))
                                 raise ParseException(msg)
                             operands = param1.split('.')
+                            operands.reverse()
                         else:
-                            operands = [ (param1>>8)&0xFF, param1 & 0xFF ]
+                            for num in range(nregs):
+                                operands.append((param1>>8*num) & 0xFF)
                         if assign_type == '=':
-                            f.write('  ' * level)
-                            f.write('  move %s, %s' % (regs[1], str(operands[1])))
-                            f.write('\n')
-                            f.write('  ' * level)
-                            f.write('  move %s, %s' % (regs[0], str(operands[0])))
-                            f.write('\n')
+                            for num in range(nregs):                                
+                                f.write('  ' * level)
+                                f.write('  move %s, %s' % (regs[num], str(operands[num])))
+                                f.write('\n')
                         elif assign_type == '+=':
-                            f.write('  ' * level)
-                            f.write('  add %s, %s' % (regs[1], str(operands[1])))
-                            f.write('\n')
-                            f.write('  ' * level)
-                            f.write('  addcy %s, %s' % (regs[0], str(operands[0])))
+                            for num in range(nregs):
+                                f.write('  ' * level)
+                                if num == 0:
+                                    f.write('  add %s, %s' % (regs[num], str(operands[num])))
+                                else:
+                                    f.write('  addcy %s, %s' % (regs[num], str(operands[num])))
+                                f.write('\n')
                         elif assign_type == '-=':
-                            f.write('  ' * level)
-                            f.write('  sub %s, %s' % (regs[1], str(operands[1])))
-                            f.write('\n')
-                            f.write('  ' * level)
-                            f.write('  subcy %s, %s' % (regs[0], str(operands[0])))
+                            for num in range(nregs):
+                                f.write('  ' * level)
+                                if num == 0:
+                                    f.write('  sub %s, %s' % (regs[num], str(operands[num])))
+                                else:
+                                    f.write('  subcy %s, %s' % (regs[num], str(operands[num])))
+                                f.write('\n')
                         elif assign_type == '<<=':
                             if type(operands[0]) == str:
                                 msg = 'Shifts must be a constant value'
                                 raise ParseException(msg)
                             while param1 > 0:
-                                f.write('  ' * level)
-                                f.write('  sl0 %s' % regs[1])
-                                f.write('\n')
-                                f.write('  ' * level)
-                                f.write('  sla %s' % regs[0])
-                                f.write('\n')
+                                for num in range(nregs):
+                                    f.write('  ' * level)
+                                    if num == 0:
+                                        f.write('  sl0 %s' % regs[num])
+                                    else:
+                                        f.write('  sla %s' % regs[num])      
+                                    f.write('\n')
                                 param1 -= 1
                         elif assign_type == '>>=':
                             if type(operands[0]) == str:
                                 msg = 'Shifts must be a constant value'
                                 raise ParseException(msg)
                             while param1 > 0:
-                                f.write('  ' * level)
-                                f.write('  sr0 %s' % regs[0])
-                                f.write('\n')
-                                f.write('  ' * level)
-                                f.write('  sra %s' % regs[1])
-                                f.write('\n')
+                                for num in range(nregs):
+                                    f.write('  ' * level)
+                                    if num == 0:
+                                        f.write('  sr0 %s' % regs[num])
+                                    else:
+                                        f.write('  sra %s' % regs[num])
+                                    f.write('\n')
                                 param1 -= 1
                         elif assign_type == '&=' or assign_type == '|=' or assign_type == '^=':
                             if assign_type == '&=':
@@ -1374,24 +1397,29 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                 op = 'or'
                             elif assign_type == '^=':
                                 op = 'xor'
-                            f.write('  ' * level)
-                            f.write('  %s %s, %s' % (op, regs[1], str(operands[1])))
-                            f.write('\n')
-                            # Figure out if we need two operations or just one.
-                            need_second_op = True
-                            if type(operands[1]) == str:
-                                need_second_op = True
-                            elif op == 'and' and operands[1] == 255:
-                                need_second_op = False
-                            elif op == 'or' and operands[1] == 0:
-                                need_second_op = False
-                            elif op == 'xor' and operands[1] == 0:
-                                need_second_op = False
-
-                            if need_second_op == True:
-                                f.write('  ' * level)
-                                f.write('  %s %s, %s' % (op, regs[0], str(operands[0])))
-                                f.write('\n')
+                            for num in range(nregs):
+                                # figure out if we need this
+                                # Note that flags will technically
+                                # differ if we skip an op, but
+                                # there's no way to do a multi-register
+                                # bitwise operation that combines flags anyway.
+                                need_op = True
+                                if type(operands[num]) == str:
+                                    need_op = True
+                                elif op == 'and' and operands[num] == 255:
+                                    need_op = False
+                                elif op == 'or' and operands[num] == 0:
+                                    need_op = False
+                                elif op == 'xor' and operands[num] == 0:
+                                    need_op = False
+                                if need_op == True:
+                                    f.write('  ' * level)
+                                    f.write('  %s %s, %s' % (op, regs[num], str(operands[num])))
+                                    f.write('\n')
+                                else:
+                                    print "Note: ignoring '%s %s %s' NOP" % (regs[num], assign_type, operands[num])
+                                    print "      in multi-register operation."
+                                    
                         else:
                             msg = 'Unknown operator "%s"' % (str(line))
                             raise ParseException(msg)                            

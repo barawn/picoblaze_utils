@@ -43,6 +43,24 @@ to use &~ or ~&, but that's got & in it too.
 
 This is only a compare operand!
 
+**No for loops.** Yes, this is kinda annoying, but that's
+not an easy syntax to translate.
+
+For loops, the best thing to do is a do-while loop with
+a subtract-and-test at the end. **Empty while blocks
+with brackets don't work** - instead, terminate them
+with a semicolon and they will. So while (--s0) works.
+
+Right now --(register) is the only "do something and
+compare" operation, HOWEVER you can use the Z and C flags
+in a compare operation and test against zero (i.e.
+if (Z == 0) or if (Z != 0)).
+
+Note that this is --s0, not s0--, and this is **on purpose**.
+Prefix operators act before evaluating, and the flags on a
+PicoBlaze are set afterwards, so you really are doing --s0.
+This means while (--s0) will run 1 time if s0 is 1.
+
 You can use macro, this python depend on mcpp(preprocessor) and astyle(style formater).
 
 mcpp: http://mcpp.sourceforge.net/

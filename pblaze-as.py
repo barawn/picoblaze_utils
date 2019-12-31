@@ -615,7 +615,7 @@ def _preprocess_normal(instructions, lst_inner_asm, symbols):
         #normal symbol
         if i > 0:#check op name except 'jump' and 'call'
             if instructions[0] in ['jump', 'call', 'return',
-                    'returni', 'enable', 'disable']:
+                                   'returni', 'enable', 'disable','regbank']:
                 newinstructions.append(elem)
             elif is_register(elem):
                 newinstructions.append(elem)
@@ -863,6 +863,9 @@ def _assembly_control(opcode, instruction, cfg):
         elif instruction[1] == 'interrupt':
             cond = None
             AAA  = int(instruction[0] == 'enable')
+        elif instruction[0] == 'regbank':
+            cond = None
+            AAA  = int(instruction[0] == 'B')
         else:
             cond = None
             AAA  = instruction[1]
@@ -983,6 +986,7 @@ def _get_kcpsm6_assembler():
         'disable'   :(0x28000, _assembly_control),
         'enable'    :(0x28001, _assembly_control),
         'returni'   :(0x29000, _assembly_control),
+        'regbank'   :(0x37000, _assembly_control),
                        
         'inst'      :(0, lambda opcode, insts, cfg: insts[1])
     }
