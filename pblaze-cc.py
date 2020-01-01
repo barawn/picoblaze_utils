@@ -8,7 +8,7 @@
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2, or (at your option)
 #  any later version.
-#
+#x
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -382,11 +382,15 @@ def parse_funcdecl(info, line):
     #parse __attribute__ ((...))
     res = re.match(r'(\w+) (\w+)\s*\((.*)\) (.*);$', line)
     if info.level == 0 and res:
-        print "found function"
+        print "found function at %s" % line
         ret = res.groups()[0]
         name = res.groups()[1]
         params = res.groups()[2]
         attributes = res.groups()[3]
+        print "ret %s" % ret
+        print "name %s" % name
+        print "params %s" % params
+        print "attributes %s" % attributes
         info.lines.append([info.level, info.lineno, 'funcdecl', 
             [name, ret, params, attributes]])
         return True
@@ -519,19 +523,28 @@ def convert_list_to_block(info):
         if t == 'funcdecl':
             name = code[0]
             attributes = code[3]
-            res = re.match('__attribute__[ \t]*\(\((.+)\W*\((.+)\)\)\)', attributes)
-            if res:
-                clear_attrs = []
-                attrs = res.groups()
-                for attr in attrs:
-                    attr = re.sub('^[ ]+', '', attr)
-                    attr = re.sub('[ ]+$', '', attr)
-                    if re.match(r'"(.+)"', attr):
-                        clear_attrs.append(re.match(r'"(.+)"', attr).groups()[0])
-                    else:
-                        clear_attrs.append(attr)
+            # I have NO IDEA what this was supposed to do.
+            # 
+            # res = re.match('__attribute__[ \t]*\(\((.+)\W*\((.+)\)\)\)', attributes)
+            # if res:
+            #     clear_attrs = []
+            #     attrs = res.groups()
+            #     for attr in attrs:
+            #         attr = re.sub('^[ ]+', '', attr)
+            #         attr = re.sub('[ ]+$', '', attr)
+            #         if re.match(r'"(.+)"', attr):
+            #             clear_attrs.append(re.match(r'"(.+)"', attr).groups()[0])
+            #         else:
+            #             clear_attrs.append(attr)
 
-                map_attribute[name] = clear_attrs
+            #     map_attribute[name] = clear_attrs
+            print "parsing %s" % attributes
+            res = re.match('__attribute__\s*\(\(\s*(\w+)\s*\)\)', attributes)
+            if res:
+                attr = res.groups()[0]
+                if attr == "noreturn":
+                    print "Function with attribute noreturn, adding to label list"
+                    labels.append(name)
             else:
                 msg = 'Unknow attribute format "%s"' % attribute
                 raise ParseException(msg)
@@ -1262,8 +1275,9 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         flage_t = 'Z'
                         flage_f = 'NZ'
                     elif compare == '--':
-                        flage_t = 'Z'
-                        flage_f = 'NZ'
+                        # if (--s0) matches if NZ, fails if Z
+                        flage_t = 'NZ'
+                        flage_f = 'Z'
                     else:
                         msg = 'Not support "%s"' % str(line)
                         raise ParseException(msg)

@@ -865,7 +865,7 @@ def _assembly_control(opcode, instruction, cfg):
             AAA  = int(instruction[0] == 'enable')
         elif instruction[0] == 'regbank':
             cond = None
-            AAA  = int(instruction[0] == 'B')
+            AAA  = int(instruction[1] == 'B')
         else:
             cond = None
             AAA  = instruction[1]
