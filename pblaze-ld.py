@@ -25,6 +25,7 @@ import os
 import sys
 import json
 import getopt
+import re
 from mako.template import Template
 
 tpl = '''\
@@ -45,6 +46,21 @@ module ${project} (address, instruction, clk);
 input [9:0] address;
 input clk;
 output [17:0] instruction;
+parameter DEBUG = "FALSE";
+
+generate
+    if (DEBUG == "TRUE") begin : D
+       // allocate a bunch of space for the text
+       reg [8*32-1:0] dbg_instr;
+       always @(*) begin : DI
+         case(address)
+%for (row,v) in debug_data:
+             ${row} : dbg_instr = "${v}";
+%endfor
+         endcase
+       end
+    end
+endgenerate
 
 RAMB16_S18 #(
     .INIT(18'h00000),
@@ -232,7 +248,7 @@ def convert_to_blockram(map_object):
 
     return (lst_data, lst_parity)
 
-def render(map_config, map_object, lst_data, lst_parity):
+def render(map_config, map_object, lst_data, lst_parity,debug_data):
     n = len(lst_data)
     step = n / 4
     group0_data = lst_data[0*step:1*step]
@@ -252,6 +268,7 @@ def render(map_config, map_object, lst_data, lst_parity):
             project=map_config['--project'],
             ctime=map_object['ctime'],
             mtime=map_object['mtime'],
+            debug_data=debug_data,
             group0_data=group0_data,
             group1_data=group1_data,
             group2_data=group2_data,
@@ -265,8 +282,61 @@ def render(map_config, map_object, lst_data, lst_parity):
 if __name__ == '__main__':
     map_config = parse_commandline()
     map_object = load_object(map_config)
+    # let's try to construct debugging info!
+    labels = map_object['labels']
+    # sort all labels by their address
+    fn = sorted(labels.items(), key=lambda x: x[1])
+    fn.reverse()
+    # get the first label
+    nextline = fn.pop()
+    i=0
+    current_function = None
+    debug_data = []
+    while i < 1024:
+        label = ""
+        # are we out of labels?
+        if nextline == None:
+            label = "%s + 0x%3.3x" % (current_function[0], i-current_function[1])
+        # have we reached the target label?        
+        elif nextline[1] == i:
+            label = nextline[0]            
+            current_function = nextline
+            while nextline[1] == i:
+                # if no more, break out
+                if len(fn) == 0:
+                    nextline = None
+                    break
+                tmp = fn.pop()
+                # autolabel?                
+                if re.match(r'L_[a-z0-9]*_[0-9]*', tmp[0]):
+                    # if no more, break out
+                    if len(fn) == 0:
+                        nextline = None
+                        break
+                    # otherwise skip
+                elif re.match(r'JOIN_[0-9]*', tmp[0]):
+                    if len(fn) == 0:
+                        nextline = None
+                        break
+                    # otherwise skip
+                elif re.match(r'_end_.*', tmp[0]):
+                    if len(fn) == 0:
+                        nextline = None
+                        break
+                    # otherwise skip
+                else:
+                    nextline = tmp                    
+        else:
+            # nope, we're incrementing
+            label = "%s + 0x%3.3x" % (current_function[0], i-current_function[1])
+
+        label = label.ljust(32)
+        label = label[0:31]            
+        debug_data.append((i, label))
+        i = i + 1
+                        
     (lst_data, lst_parity) = convert_to_blockram(map_object)
-    text = render(map_config, map_object, lst_data, lst_parity)
+    text = render(map_config, map_object, lst_data, lst_parity, debug_data)
 
     #insert pblaze-cc information
     lst_text = []

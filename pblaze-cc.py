@@ -245,7 +245,7 @@ def parse_condition(info, line):
         return True
 
     #fmt: if (--var)
-    res = re.match(r'(if|else if|while) \(--\s*(.+)\)', line)
+    res = re.match(r'(if|else if|while)\s*\(--\s*(.+)\)', line)
     if res:
         cond = res.groups()[0]
         param0 = res.groups()[1]
@@ -263,7 +263,7 @@ def parse_condition(info, line):
         return True
     
     #fmt: if (!var)
-    res = re.match(r'(if|else if|while) \(!\s*(.+)\)', line)
+    res = re.match(r'(if|else if|while)\s*\(!\s*(.+)\)', line)
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
@@ -280,7 +280,7 @@ def parse_condition(info, line):
         return True
 
     #fmt: if (a & b)
-    res = re.match(r'(if|else if|while) \((.+) (&|\|\^|) (.+)\)', line)
+    res = re.match(r'(if|else if|while)\s*\((.+) (&|\|\^|) (.+)\)', line)
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
@@ -297,7 +297,7 @@ def parse_condition(info, line):
         return True
 
     #fmt: if (a < b)
-    res = re.match(r'(if|else if|while) \((.+) (>|<|==|!=|>=|<=) (.+)\)', line)
+    res = re.match(r'(if|else if|while)\s*\((.+) (>|<|==|!=|>=|<=) (.+)\)', line)
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
@@ -314,7 +314,7 @@ def parse_condition(info, line):
         return True
 
     #fmt: if (1)
-    res = re.match(r'(if|else if|while) \((s[0-9a-fA-F]|\d+)\)', line)
+    res = re.match(r'(if|else if|while)\s*\((s[0-9a-fA-F]|\d+)\)', line)
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
