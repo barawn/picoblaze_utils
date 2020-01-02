@@ -46,21 +46,21 @@ module ${project} (address, instruction, clk);
 input [9:0] address;
 input clk;
 output [17:0] instruction;
-parameter DEBUG = "FALSE";
 
-generate
-    if (DEBUG == "TRUE") begin : D
-       // allocate a bunch of space for the text
-       reg [8*32-1:0] dbg_instr;
-       always @(*) begin : DI
-         case(address)
+// Debugging symbols. Note that they're
+// only 48 characters long max.
+// synthesis translate_off
+
+// allocate a bunch of space for the text
+   reg [8*48-1:0] dbg_instr;
+   always @(*) begin
+     case(address)
 %for (row,v) in debug_data:
-             ${row} : dbg_instr = "${v}";
+         ${row} : dbg_instr = "${v}";
 %endfor
-         endcase
-       end
-    end
-endgenerate
+     endcase
+   end
+// synthesis translate_on
 
 RAMB16_S18 #(
     .INIT(18'h00000),
@@ -282,6 +282,7 @@ def render(map_config, map_object, lst_data, lst_parity,debug_data):
 if __name__ == '__main__':
     map_config = parse_commandline()
     map_object = load_object(map_config)
+
     # let's try to construct debugging info!
     labels = map_object['labels']
     # sort all labels by their address
@@ -296,7 +297,7 @@ if __name__ == '__main__':
         label = ""
         # are we out of labels?
         if nextline == None:
-            label = "%s + 0x%3.3x" % (current_function[0], i-current_function[1])
+            label = "%s+0x%3.3x" % (current_function[0], i-current_function[1])
         # have we reached the target label?        
         elif nextline[1] == i:
             label = nextline[0]            
@@ -328,10 +329,10 @@ if __name__ == '__main__':
                     nextline = tmp                    
         else:
             # nope, we're incrementing
-            label = "%s + 0x%3.3x" % (current_function[0], i-current_function[1])
+            label = "%s+0x%3.3x" % (current_function[0], i-current_function[1])
 
-        label = label.ljust(32)
-        label = label[0:31]            
+        label = label.ljust(48)
+        label = label[0:47]            
         debug_data.append((i, label))
         i = i + 1
                         
