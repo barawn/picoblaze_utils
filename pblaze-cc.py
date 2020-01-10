@@ -2,7 +2,7 @@
 # -*- coding:utf-8 -*-
 #  
 #  Copyright 2013 buaa.byl@gmail.com
-#
+#  Copyright 2020 dbarawn@gmail.com
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
 #
 # 2013.08.12    first release
 # 2017.01.11    add exe path to include search directory.
-#
+# 2020.01.04    add a lot of features (multi-register, Z/C, single-while)
 #
 # this is fake c compiler.
 # I write this script for easy write assembly code.
@@ -240,18 +240,63 @@ def parse_condition(info, line):
     line = re.sub(r'[ ]+\)', ')', line)
     #print repr(line)
 
+    inverted = False
+    
     if line == 'else':
         info.lines.append([info.level, info.lineno, 'else', []])
         return True
 
+    #let's try recognizing if (!( blah ))    
+    res = re.match(r'(if|else if|while)\s*\(!(\(.*\))\)', line)
+    if res:
+        print "recognized an inverted comparison, try to flop its logic later"
+        inverted = True
+        newline = "%s %s" % ( res.groups()[0] , res.groups()[1])        
+        print "converting '%s' to inverted '%s'" % ( line , newline )
+        line = newline
+
+    #fmt: if (var--)
+    res = re.match(r'(if|else if|while)\s*\((.+)--\s*\)', line)
+    if res:
+        cond = res.groups()[0]
+        param0 = res.groups()[1]
+        compare = '--'
+        # this indicates a C test
+        param1 = '-1'
+        if inverted:
+            # hide the inversion in the compare parameter, we'll
+            # know what to do later.
+            param1 = '-2'
+
+        if cond == 'while' and end_while:
+            print "while and end_while"
+            info.lines.append([info.level, info.lineno, 'dowhile',
+                [compare, _parse_param(param0), _parse_param(param1)]])
+            return True        
+
+        info.lines.append([info.level, info.lineno, cond,
+            [compare, _parse_param(param0), _parse_param(param1)]])
+        return True
+
+            
     #fmt: if (--var)
-    res = re.match(r'(if|else if|while)\s*\(--\s*(.+)\)', line)
+    #we actually need a separate case for (s--), deal with that
+    #later. s-- uses C as a test, rather than Z. We might
+    #embed that in param1: we could use -1 and -2 as the [truth, inverted]
+    #case there.
+    #There will never be an if (a++) operator, we can't do that
+    #(can't test for 1), but there may be a (++a) operator.
+    res = re.match(r'(if|else if|while)\s*\(\s*--(.+)\)', line)
     if res:
         cond = res.groups()[0]
         param0 = res.groups()[1]
         compare = '--'
         param1 = '0'
-
+        
+        if inverted:
+            # hide the inversion in the compare parameter
+            param1 = '1'
+        
         if cond == 'while' and end_while:
             print "while and end_while"
             info.lines.append([info.level, info.lineno, 'dowhile',
@@ -267,9 +312,14 @@ def parse_condition(info, line):
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
-        compare = '=='
-        param1  = '0'
-
+        # we can do inversions here automatically
+        # you're a bastard for doing if (!(!a)) but whatever, some macros
+        # might generate this
+        if inverted:
+            compare = '!='
+        else:
+            compare = '=='
+        param1 = '0'
         if cond == 'while' and end_while:
             info.lines.append([info.level, info.lineno, 'dowhile',
                 [compare, _parse_param(param0), _parse_param(param1)]])
@@ -278,15 +328,27 @@ def parse_condition(info, line):
         info.lines.append([info.level, info.lineno, cond,
             [compare, _parse_param(param0), _parse_param(param1)]])
         return True
-
-    #fmt: if (a & b)
-    res = re.match(r'(if|else if|while)\s*\((.+) (&|\|\^|) (.+)\)', line)
+    
+    #fmt: if (a & b) or if (a ^ b)
+    # Note that if (a | b) is NOT representable in PicoBlaze.
+    # you have to do a |= b, if (a).
+    #
+    # But if (a & b) is representable by test Z,
+    # and if (a ^ b) is the complement of that (test NZ).
+    res = re.match(r'(if|else if|while)\s*\((.+) (&|\^) (.+)\)', line)
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
         compare = res.groups()[2]
         param1  = res.groups()[3]
 
+        if inverted:
+            if compare == '&':
+                compare = '^'
+            elif compare == '^':
+                compare = '&'
+            print "'%s' became '%s %s %s %s'" % (line, cond, param0, compare, param1)
+                        
         if cond == 'while' and end_while:
             info.lines.append([info.level, info.lineno, 'dowhile',
                 [compare, _parse_param(param0), _parse_param(param1)]])
@@ -304,6 +366,22 @@ def parse_condition(info, line):
         compare = res.groups()[2]
         param1  = res.groups()[3]
 
+        # we can invert these here.
+        if inverted:
+            if compare == "==":
+                compare = "!="
+            elif compare == "!=":
+                compare = "=="
+            elif compare == "<":
+                compare = ">="
+            elif compare == ">":
+                compare = "<="
+            elif compare == "<=":
+                compare = ">"
+            elif compare == ">=":
+                compare = "<"
+            print "'%s' became '%s %s %s %s'" % (line, cond, param0, compare, param1)
+        
         if cond == 'while' and end_while:
             info.lines.append([info.level, info.lineno, 'dowhile',
                 [compare, _parse_param(param0), _parse_param(param1)]])
@@ -314,11 +392,16 @@ def parse_condition(info, line):
         return True
 
     #fmt: if (1)
-    res = re.match(r'(if|else if|while)\s*\((s[0-9a-fA-F]|\d+)\)', line)
+    res = re.match(r'(if|else if|while)\s*\((s[0-9a-fA-F]|\d+|[ZC])\)', line)
     if res:
         cond    = res.groups()[0]
         param0  = res.groups()[1]
-        compare = '!='
+        # inversion here is easy. This happens if you do
+        # if (!(s0)) which I'm fine with
+        if inverted:
+            compare = '=='
+        else:
+            compare = '!='
         param1  = '0'
 
         if cond == 'while' and end_while:
@@ -346,7 +429,7 @@ def parse_assign(info, line):
         return True
 
     #fmt: a++
-    res = re.match(r'(.+) (\+\+|--)', line)
+    res = re.match(r'(.+)\s*(\+\+|--)', line)
     if res:
         param0  = res.groups()[0]
         assign  = res.groups()[1]
@@ -477,6 +560,49 @@ def parse(text):
             msg = 'Unknown format "%d:%s"' % (info.lineno, line)
             raise ParseException(msg)
 
+    print "info line dump"
+    for line in info.lines:
+        print line
+    # We need to reprocess the lines to look to see if we misidentified
+    # a while() statement as a do/while loop.
+    # Because of the astyle processing, this actually only happens
+    # if there's an empty while statement, like
+    # while (s0--);
+    # We identify this by looking for a 'dowhile' that is NOT
+    # immediately preceded by a closing brace.
+    # Again, thanks to astyle, this is a GUARANTEE that
+    # we've screwed up the do/while identification.
+    idx = 0
+    while idx < len(info.lines):
+        line = info.lines[idx]
+        if line[IDX_TYPE] == 'dowhile':
+            singlewhile = False
+            if idx == 0:
+                # if idx is zero, we've definitely effed it up
+                # don't know how that would happen, buuuut
+                print "Single-line while (line 0)"
+                print "Line is:", line[IDX_CODE]
+                singlewhile = True
+            else:
+                test_lineno = line[IDX_LINENO]
+                previous_code = info.lines[idx-1][IDX_CODE]
+                previous_type = info.lines[idx-1][IDX_TYPE]
+                previous_lineno = info.lines[idx-1][IDX_LINENO]
+                if previous_type != 'block':
+                    print "Single-line while at %d (previous type is %s)" % (test_lineno, previous_type)
+                    print "Line is:", line[IDX_CODE]
+                    singlewhile = True
+                elif previous_code != '}':
+                    print "Single-line while at %d (previous block is %s)" % (test_lineno, previous_code)
+                    print "Line is:", line[IDX_CODE]
+                    singlewhile = True
+                elif (test_lineno - previous_lineno != 1):
+                    print "Single-line while at %d (previous closing brace at %d)" % (test_lineno, previous_lineno)
+                    print "Line is:", line[IDX_CODE]
+                    singlewhile = True
+            if singlewhile:
+                info.lines[idx][IDX_TYPE] = 'singlewhile'
+        idx = idx + 1
     return info
 
 def dump_parse(lines, no_title=False, f=sys.stdout):
@@ -525,23 +651,23 @@ def convert_list_to_block(info):
             attributes = code[3]
             # I have NO IDEA what this was supposed to do.
             # 
-            # res = re.match('__attribute__[ \t]*\(\((.+)\W*\((.+)\)\)\)', attributes)
-            # if res:
-            #     clear_attrs = []
-            #     attrs = res.groups()
-            #     for attr in attrs:
-            #         attr = re.sub('^[ ]+', '', attr)
-            #         attr = re.sub('[ ]+$', '', attr)
-            #         if re.match(r'"(.+)"', attr):
-            #             clear_attrs.append(re.match(r'"(.+)"', attr).groups()[0])
-            #         else:
-            #             clear_attrs.append(attr)
-
-            #     map_attribute[name] = clear_attrs
-            print "parsing %s" % attributes
-            res = re.match('__attribute__\s*\(\(\s*(\w+)\s*\)\)', attributes)
+            res = re.match('__attribute__[ \t]*\(\((.+)\W*\((.+)\)\)\)', attributes)
+            res2 = re.match('__attribute__\s*\(\(\s*(\w+)\s*\)\)', attributes)
             if res:
-                attr = res.groups()[0]
+                print "complex attribute match"
+                clear_attrs = []
+                attrs = res.groups()
+                for attr in attrs:
+                    attr = re.sub('^[ ]+', '', attr)
+                    attr = re.sub('[ ]+$', '', attr)
+                    if re.match(r'"(.+)"', attr):
+                        clear_attrs.append(re.match(r'"(.+)"', attr).groups()[0])
+                    else:
+                        clear_attrs.append(attr)
+
+                map_attribute[name] = clear_attrs
+            elif res2:
+                attr = res2.groups()[0]
                 if attr == "noreturn":
                     print "Function with attribute noreturn, adding to label list"
                     labels.append(name)
@@ -552,11 +678,13 @@ def convert_list_to_block(info):
             name = code[0]
             body = [line]
             map_function[name] = body
+            print "new function", name
         elif t == 'file':
             body.insert(0, line)
         elif t == 'block':
             continue
         else:
+            print "adding", line, "to function"
             body.append(line)
 
     ##debug
@@ -586,7 +714,7 @@ def convert_list_to_block(info):
                 label_prefix = 'L_%s_' % hashlib.md5(fpath).hexdigest()
                 i += 1
 
-            elif level != curr_level or t in ['do', 'dowhile', 'while', 'if',
+            elif level != curr_level or t in ['do', 'singlewhile', 'dowhile', 'while', 'if',
                     'else if', 'else', 'break', 'continue']:
                 if i - begin > 0 and len(body[begin:i]) > 0:
                     #generate label
@@ -848,21 +976,39 @@ def convert_condition_to_ifgoto2(map_function):
     #               ->  endif
     #
     for name in map_function:
+        print "processing function", name
         lst_block = map_function[name]
 
         map_forward = {}
         map_backward = {}
+        
+        print "lst_block dump"
+        for block in lst_block:
+            print block
 
         idx_block = 0
         while idx_block < len(lst_block):
             label, block = lst_block[idx_block]
-
             first_line = block[0]
             level = first_line[IDX_LEVEL]
+            
+            print idx_block, "first_line ", first_line, "level", level
 
-            if first_line[IDX_TYPE] in ['if', 'else', 'else if', 'while']:
+            # single whiles are special, they have no body of code to jump to.
+            # so you don't want to look for the next label (which is the label after the compare)
+            # you instead want to look for the label of the compare
+            # This is why we identify them specially.
+            if first_line[IDX_TYPE] in ['singlewhile']:
+                # loops back to itself
+                print "singlewhile labelling"
+                label_t_next = lst_block[idx_block][0]
+                label_f_next = find_next_label(lst_block[idx_block+1:], level)
+                first_line[IDX_CODE].append(label_t_next)
+                first_line[IDX_CODE].append(label_f_next)                
+            elif first_line[IDX_TYPE] in ['if', 'else', 'else if', 'while']:
                 if idx_block+1 < len(lst_block):
                     label_t_next = lst_block[idx_block+1][0]
+                    print "label_t_next ", label_t_next                    
                 else:
                     label_t_next = '(END)'
                 label_f_next = find_next_label(lst_block[idx_block+1:], level)
@@ -896,6 +1042,8 @@ def convert_condition_to_ifgoto2(map_function):
                 else:
                     label_f_next = '(END)'
 
+                print label_t_next
+                print label_f_next
                 first_line[IDX_CODE].append(label_t_next)
                 first_line[IDX_CODE].append(label_f_next)
 
@@ -980,13 +1128,16 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
         #check if isr
         if name in map_attribute:
             attr = map_attribute[name]
+            print "attribute: %s" % attr
             if attr[0] == 'at':
                 f.write('address %s' % attr[1])
                 f.write('\n')
             elif attr[0] == 'interrupt':
-                num  = re.search(r'IRQ(\d+)', attr[1].upper()).groups()[0]
-                num  = int(num)
-                addr = 0x3D0 + num
+                # yeah, whatever, just use 0x3D0 for now
+                #num  = re.search(r'IRQ(\d+)', attr[1].upper()).groups()[0]
+                #num  = int(num)
+                num = 0
+                addr = 0x3D0 + num                
                 isr_num[name] = num
                 isr_table[addr] = name
                 isr_routine[name] = addr
@@ -1153,13 +1304,19 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         msg = 'Unknown instruction "%s"' % (str(line))
                         raise ParseException(msg)
 
-                elif t in ['if', 'else if', 'while', 'dowhile']:
+                elif t in ['if', 'else if', 'while', 'dowhile', 'singlewhile']:
                     compare = code[0]
                     param0  = code[1]
                     param1  = code[2]
 
+                    inverted = False
+                    if compare[0] == '$':
+                        inverted = True
+                        compare = compare[1:]
+                        print "inverted ",
+                        
                     print "compare ", compare, " param0 ", param0, " param1 ", param1
-                    
+
                     #check if const value
                     if type(param0) == types.IntType and \
                             type(param1) == types.IntType:
@@ -1168,11 +1325,17 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         exec(text, {}, res)
                         if res['val'] == True or res['val'] != 0:
                             param0  = 's0'
-                            compare = '=='
+                            if inverted:
+                                compare = '!='
+                            else:
+                                compare = '=='
                             param1  = 's0'
                         else:
                             param0  = 's0'
-                            compare = '!='
+                            if inverted:
+                                compare = '=='
+                            else:
+                                compare = '!='
                             param1  = 's0'
                     elif type(param0) == types.IntType and \
                             type(param1) != types.IntType:
@@ -1189,12 +1352,21 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     f.write('\n')
 
                     f.write('  ' * level)                        
+                                
                     if compare in ['==', '!=', '<', '>=']:
                         if param0 == 'Z' or param0 == 'C':
                             print "condition check: ", param0, compare, param1
                             if param1 != 0 or compare == '<' or compare == '>=':
                                 msg = 'Condition checks are only == 0 or != 0'
-                                raise ParseException(msg)                                
+                                raise ParseException(msg)
+                            # we can handle the inversion here
+                            if inverted:
+                                if compare == '==':
+                                    compare = '!='
+                                else:
+                                    compare = '=='
+                                inverted = False
+                            
                         # check double register compare
                         # I should extend this to arbitrary length.
                         elif len(param0.split('.')) > 1:
@@ -1225,8 +1397,8 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                     f.write('  comparecy %s, %s' % (regs[num], str(operands[num])))        
                         else:
                             f.write('  compare %s, %s' % (str(param0), str(param1)))
-                    # |^ is an inverted bit test
-                    elif compare in ['&','|^']:
+                    # ^ is the opposite of & for a bit test
+                    elif compare in ['&','^']:
                         f.write('  test %s, %s' % (str(param0), str(param1)))
                     elif compare in ['--']:
                         if len(param0.split('.')) > 1:
@@ -1246,7 +1418,6 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         
                     f.write('\n')
 
-                    #compare
                     if param0 =='Z' or param0 == 'C':
                         if compare == '==':
                             # equal zero
@@ -1271,13 +1442,30 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     elif compare == '&':
                         flage_t = 'NZ'
                         flage_f = 'Z'
-                    elif compare == '|^':
+                    elif compare == '^':
                         flage_t = 'Z'
                         flage_f = 'NZ'
                     elif compare == '--':
-                        # if (--s0) matches if NZ, fails if Z
-                        flage_t = 'NZ'
-                        flage_f = 'Z'
+                        print "subtract-test: ",
+                        # carry test: this is s0--. True if not C.
+                        if param1 == -1:
+                            print "test-subtract"
+                            flage_t = 'NC'
+                            flage_f = 'C'
+                        # carry test: this is !(s0--). True if C.
+                        if param1 == -2:
+                            print "test-subtract inverted"
+                            flage_t = 'C'
+                            flage_f = 'NC'
+                        if param1 == 1:
+                            # inverted: matches if Z, fails if NZ
+                            print "subtract-test inverted"
+                            flage_t = 'Z'
+                            flage_f = 'NZ'
+                        else:
+                            # if (--s0) matches if NZ, fails if Z
+                            flage_t = 'NZ'
+                            flage_f = 'Z'
                     else:
                         msg = 'Not support "%s"' % str(line)
                         raise ParseException(msg)
@@ -1285,7 +1473,6 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     #optimize jump
                     if idx_block + 1 < len(lst_block):
                         next_block_label = lst_block[idx_block + 1][0]
-
                         #check jump-jump
                         label_bb = label_f
                         while True:
@@ -1502,11 +1689,12 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
             num = isr_num[name]
             isr_clr_addr = num / 8
             isr_clr_data = 1 << (num % 8)
-
-            f.write('  ;auto clear IRQ%d, offset = 0x%x, value = 0x%02X\n' % \
-                    (num, isr_clr_addr, isr_clr_data))
-            f.write('  move sF, %d\n' % isr_clr_data)
-            f.write('  output sF, %d\n' % (BASEADDR_INTC_CLEAR + isr_clr_addr))
+# no irq autoclearing,
+# maybe add a way to include this
+#            f.write('  ;auto clear IRQ%d, offset = 0x%x, value = 0x%02X\n' % \
+#                    (num, isr_clr_addr, isr_clr_data))
+#            f.write('  move sF, %d\n' % isr_clr_data)
+#            f.write('  output sF, %d\n' % (BASEADDR_INTC_CLEAR + isr_clr_addr))
             f.write('  returni enable')
         elif name == "loop":
             f.write('  jump loop')
@@ -1613,7 +1801,13 @@ if __name__ == '__main__':
         stdout_text = '\n'.join(lst_line)
 
         #format style
-        args = ['astyle.exe', '--style=gnu', '--suffix=none']
+        # The 'j' option here breaks up one-line condition blocks.
+        # - this is needed to process single-line conditions (e.g. if (a) c = d;)
+        #
+        # The 'f' option here inserts lines between unrelated blocks:
+        # - this is needed to identify single-line whiles versus do-whiles.
+        # 
+        args = ['astyle.exe', '-f', '-j', '--style=gnu', '--suffix=none']
         (returncode, stdout_text, stderr_text) = popen(args, stdout_text)
         if returncode == 0:
             if '-g' in map_options:

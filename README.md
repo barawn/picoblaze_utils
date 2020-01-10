@@ -16,53 +16,77 @@ That's what a compiler is for.
 
 PicoBlaze (like most processors) only has 2-operand operations,
 so keep that in mind: don't do "A = B + C", that's a 3-operand
-operation (don't even do "A = A + B", do "A += B").
+operation (don't even do "A = A + B", do "A += B"). Yes, it would
+be easy to eventually parse this, no, I don't know if I'll do it.
 
-Added a few "pseudo-C" symbols to fill out
-what can be done. First, added multi-operand operations
-for registers: so something like
-```c
+Added a symbol to fill out what can be done. First, added
+multi-operand operations for registers. Literally any number
+of registers can combine so something like
+```
 sA.sB = 0x1000;
 ```
 with the registers ordered MSB-first. This works for all
-operations (add/subtract/compare/bitwise), including "sA.sB += sC.sD".
-Pointless bitwise operations will be trimmed, so "sA.sB |= 0x1000;"
-will be trimmed to sA |= 0x10.
-
-
-Next, added |^ to round out the test operations.
-We have all the "compare/comparecy" options
-(less than/greater than/equals), and C has
-a "bitwise and" test (if (a&b)) which tests if a bit
-is set. But we don't have a simple operation for
-if a bit is NOT set. In C we would do "if (!(a & b))"
-or "if ((a & b)==0)" but recognizing this in Python
-is beyond what I can do. So instead I just created
-a new operator ( |^ ), which is an inverted bit test.
-
-That is, (a |^ b) is true if !(a & b). The symbol's
-relatively meaningless, it probably would've made sense
-to use &~ or ~&, but that's got & in it too.
-
-This is only a compare operand!
+operations (add/subtract/compare/bitwise), including `sA.sB += sC.sD`.
+Pointless bitwise operations will be trimmed, so `sA.sB |= 0x1000;`
+will be trimmed to `sA |= 0x10`.
 
 **No for loops.** Yes, this is kinda annoying, but that's
-not an easy syntax to translate.
+not an easy syntax to translate. No structs, unions, classes,
+or variables. Again, it's really just assembly, just in a more
+familiar syntax.
 
-For loops, the best thing to do is a do-while loop with
-a subtract-and-test at the end. **Empty while blocks
-with brackets don't work** - instead, terminate them
-with a semicolon and they will. So while (--s0) works.
+# Compare (if/while/dowhile) operations
 
-Right now --(register) is the only "do something and
-compare" operation, HOWEVER you can use the Z and C flags
-in a compare operation and test against zero (i.e.
-if (Z == 0) or if (Z != 0)).
+Simple comparisons are supported, not compound operations. Comparisons
+can also be negated, as in `if (!(s0 & 0x80))`, however this is only
+for readability, as there's a complement for every operator in C.
 
-Note that this is --s0, not s0--, and this is **on purpose**.
-Prefix operators act before evaluating, and the flags on a
-PicoBlaze are set afterwards, so you really are doing --s0.
-This means while (--s0) will run 1 time if s0 is 1.
+## Comparison operations
+
+All of `<`,`>`,`<=`,`>=`,`==`, and `!=` are supported, with either
+constants or registers, but the register needs to come first. Constant
+math also works, so `if (s0 < (3 + 4)` is fine.
+
+## Bitwise operations
+
+Only `&` and `^` are supported as comparison operations, since they
+correspond to `test`/`testcy`, with `s0 ^ s1` equivalent to `!(s0 & s1)`.
+(obviously if s0 XOR s1 == 0, s0 = ~s1, and s0 & ~s0 = 0).
+
+## Arithmetic tests
+
+Right now `--s0`/`s0--` is the only operator you can merge into a test
+(so you CANNOT do `if (s0 -= 4)`, although I may add this later.
+You will **never** be able to do `if (s0 - 4)`, because that requires
+the creation of a temporary.
+
+Loops are most efficient if you use `do..while` syntax, although simple
+delay loops (e.g. `while (s0--);`) are just as efficient. This is
+because with `do..while` there's just a single compare/test/etc.
+and jump operation at the end, whereas `while` has a compare/test
+and jump at the beginning, and then a jump at the end of the loop
+to go back.
+
+Keep in mind the difference between a prefix/postfix operator: `--s0`
+tests to see if `s0` is zero after subtract, `s0--` tests to see if `s0`
+is zero before subtract (which means it's -1 afterwards).
+
+## Z and C flags
+
+You can use the Z and C flags in a compare operation and test against
+zero (i.e. if (Z == 0) or if (Z != 0)). This is useful in combination
+with the ``psm()`` intrinsic function which can help to make it clear
+that you're doing something sneaky.
+
+# Debugging symbols
+
+pblaze-ld.py generates debugging symbols inside the final HDL output,
+so in a simulation if you look inside the scope of the ROM, there will
+be a "dbg_instr" element which if you change the radix to ASCII,
+while decode where the program is. Another helpful debugging tip is
+to use the PicoBlaze "stack_pointer" debugging object and convert
+its radix to analog. This helps to visualize very quickly where the
+program is switching functions. 
 
 You can use macro, this python depend on mcpp(preprocessor) and astyle(style formater).
 
