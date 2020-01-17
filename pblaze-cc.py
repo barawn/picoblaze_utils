@@ -661,7 +661,9 @@ def convert_list_to_block(info):
                     attr = re.sub('^[ ]+', '', attr)
                     attr = re.sub('[ ]+$', '', attr)
                     if re.match(r'"(.+)"', attr):
-                        clear_attrs.append(re.match(r'"(.+)"', attr).groups()[0])
+                        to_append = re.match(r'"(.+)"', attr).groups()[0]
+                        print "appending", to_append
+                        clear_attrs.append(to_append)
                     else:
                         clear_attrs.append(attr)
 
@@ -1133,11 +1135,13 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                 f.write('address %s' % attr[1])
                 f.write('\n')
             elif attr[0] == 'interrupt':
+                vec = attr[1].upper()
+                print "interrupt attribute had", vec                
                 # yeah, whatever, just use 0x3D0 for now
                 #num  = re.search(r'IRQ(\d+)', attr[1].upper()).groups()[0]
                 #num  = int(num)
                 num = 0
-                addr = 0x3D0 + num                
+                addr = int(vec, base=0)
                 isr_num[name] = num
                 isr_table[addr] = name
                 isr_routine[name] = addr
@@ -1265,14 +1269,38 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         f.write('  %s' % code[0].replace('_', ' '))
                         f.write('\n')
                     elif code[0] in ['input', 'output', 'outputk', 'fetch', 'store']:
-                        if type(code[1][0]) == types.IntType:
-                            f.write('  ' * level)
-                            f.write('  %s %s, %d' % (code[0], code[1][1], code[1][0]))
-                            f.write('\n')
+                        # check outputk
+                        if code[0] == 'outputk':
+                            if type(code[1][0]) != types.IntType or type(code[1][1]) != types.IntType:
+                                msg = 'outputk requires constant address and value: "%s"' % (str(line))
+                                raise ParseException(msg)                            
+                        # check multi-operand.
+                        # this allows input(sB.sA, 0x0), with the address specifying the LSB.
+                        # Maybe we'll allow a "inputbe" which specifies big-endian input ordering.
+                        numops = 1
+                        regs = None
+                        if type(code[1][1]) == str:
+                            regs = code[1][1].split('.')
+                            numops = len(regs)
+                        if numops > 1:
+                            if type(code[1][0]) != types.IntType:
+                                msg = 'Multi-operand IO/memory operations require constant address: "%s"' % \
+                                    (str(line))
+                                raise ParseException(msg)
+                            regs.reverse()
+                            for i in range(len(regs)):
+                                f.write('  ' * level)
+                                f.write('  %s %s, %d' % (code[0], regs[i], (code[1][0] + i) & 0xFF))
+                                f.write('\n')
                         else:
-                            f.write('  ' * level)
-                            f.write('  %s %s, (%s)' % (code[0], code[1][1], code[1][0]))
-                            f.write('\n')
+                            if type(code[1][0]) == str:
+                                f.write('  ' * level)
+                                f.write('  %s %s, (%s)' % (code[0], code[1][1], code[1][0]))
+                                f.write('\n')
+                            elif type(code[1][0]) == types.IntType:
+                                f.write('  ' * level)
+                                f.write('  %s %s, %d' % (code[0], code[1][1], code[1][0]))
+                                f.write('\n')
                     elif code[0] in ['__asm__', 'asm', 'assembly']:
                         f.write('  ' * level)
                         inline_asm = re.search(r'"(.+)"', code[1][0]).groups()[0]
@@ -1689,12 +1717,13 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
             num = isr_num[name]
             isr_clr_addr = num / 8
             isr_clr_data = 1 << (num % 8)
-# no irq autoclearing,
-# maybe add a way to include this
-#            f.write('  ;auto clear IRQ%d, offset = 0x%x, value = 0x%02X\n' % \
-#                    (num, isr_clr_addr, isr_clr_data))
-#            f.write('  move sF, %d\n' % isr_clr_data)
-#            f.write('  output sF, %d\n' % (BASEADDR_INTC_CLEAR + isr_clr_addr))
+
+            # no irq autoclearing,
+            # maybe add a way to include this
+            # f.write('  ;auto clear IRQ%d, offset = 0x%x, value = 0x%02X\n' % \
+            #        (num, isr_clr_addr, isr_clr_data))
+            # f.write('  move sF, %d\n' % isr_clr_data)
+            # f.write('  output sF, %d\n' % (BASEADDR_INTC_CLEAR + isr_clr_addr))
             f.write('  returni enable')
         elif name == "loop":
             f.write('  jump loop')
