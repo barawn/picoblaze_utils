@@ -1439,7 +1439,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                 else:
                                     f.write('\n')
                                     f.write('  ' * level)
-                                    f.write('  subcy %s, 1' % (str(regs[num])))
+                                    f.write('  subcy %s, 0' % (str(regs[num])))
                         else:
                             print "subtract-test"
                             f.write('  sub %s, 1' % (str(param0)))
