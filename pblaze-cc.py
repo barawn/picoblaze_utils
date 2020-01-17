@@ -1481,11 +1481,11 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             flage_t = 'NC'
                             flage_f = 'C'
                         # carry test: this is !(s0--). True if C.
-                        if param1 == -2:
+                        elif param1 == -2:
                             print "test-subtract inverted"
                             flage_t = 'C'
                             flage_f = 'NC'
-                        if param1 == 1:
+                        elif param1 == 1:
                             # inverted: matches if Z, fails if NZ
                             print "subtract-test inverted"
                             flage_t = 'Z'
