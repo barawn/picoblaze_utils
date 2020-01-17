@@ -28,7 +28,10 @@ import getopt
 import re
 from mako.template import Template
 
-tpl = '''\
+dualport = False
+
+# sigh, this is big
+tpl_oneport = '''\
 `timescale 1 ps / 1ps
 
 /* 
@@ -42,9 +45,10 @@ tpl = '''\
  * target : kcpsm3
  */
 
-module ${project} (address, instruction, clk);
+module ${project} (address, instruction, enable, clk);
 input [9:0] address;
 input clk;
+input enable;
 output [17:0] instruction;
 
 // Debugging symbols. Note that they're
@@ -113,7 +117,7 @@ RAMB16_S18 #(
 ) ram_1024_x_18(
     .DI  (16'h0000),
     .DIP  (2'b00),
-    .EN (1'b1),
+    .EN (enable),
     .WE (1'b0),
     .SSR (1'b0),
     .CLK (clk),
@@ -124,6 +128,131 @@ RAMB16_S18 #(
 
 endmodule
 '''
+
+tpl_dualport = '''\
+`timescale 1 ps / 1ps
+
+/* 
+ * == pblaze-as ==
+ * source : ${project}.s
+ * create : ${ctime}
+ * modify : ${mtime}
+ */
+/* 
+ * == pblaze-ld ==
+ * target : kcpsm3
+ */
+
+module ${project} (address, instruction, enable, clk, bram_adr_i, bram_dat_o, bram_dat_i, bram_en_i, bram_we_i, bram_rd_i);
+parameter BRAM_PORT_WIDTH = 9;
+localparam BRAM_ADR_WIDTH = (BRAM_PORT_WIDTH == 18) ? 10 : 11;
+localparam BRAM_WE_WIDTH = (BRAM_PORT_WIDTH == 18) ? 2 : 1;
+input [9:0] address;
+input clk;
+input enable;
+output [17:0] instruction;
+input [BRAM_ADR_WIDTH-1:0] bram_adr_i;
+output [BRAM_PORT_WIDTH-1:0] bram_dat_o;
+input [BRAM_PORT_WIDTH-1:0] bram_dat_i;
+input bram_we_i;
+input bram_en_i;
+input bram_rd_i;
+
+// Debugging symbols. Note that they're
+// only 48 characters long max.
+// synthesis translate_off
+
+// allocate a bunch of space for the text
+   reg [8*48-1:0] dbg_instr;
+   always @(*) begin
+     case(address)
+%for (row,v) in debug_data:
+         ${row} : dbg_instr = "${v}";
+%endfor
+     endcase
+   end
+// synthesis translate_on
+
+
+BRAM_TDP_MACRO #(
+    .BRAM_SIZE("18Kb"),
+    .DOA_REG(0),
+    .DOB_REG(0),
+    .INIT(18'h00000),
+    .READ_WIDTH_A(18),
+    .WRITE_WIDTH_A(18),
+    .READ_WIDTH_B(BRAM_PORT_WIDTH),
+    .WRITE_WIDTH_B(BRAM_PORT_WIDTH),
+    .SIM_COLLISION_CHECK("ALL"),
+    .WRITE_MODE_A("WRITE_FIRST"),
+    .WRITE_MODE_B("WRITE_FIRST"),
+    // The following INIT_xx declarations specify the initial contents of the RAM
+    // Address 0 to 255
+%for (row, v) in group0_data:
+    .INIT_${row}(256'h${v}),
+%endfor
+
+    // Address 256 to 511
+%for (row, v) in group1_data:
+    .INIT_${row}(256'h${v}),
+%endfor
+
+    // Address 512 to 767
+%for (row, v) in group2_data:
+    .INIT_${row}(256'h${v}),
+%endfor
+
+    // Address 768 to 1023
+%for (row, v) in group3_data:
+    .INIT_${row}(256'h${v}),
+%endfor
+
+    // The next set of INITP_xx are for the parity bits
+    // Address 0 to 255
+%for (row, v) in group0_parity:
+    .INITP_${row}(256'h${v}),
+%endfor
+
+    // Address 256 to 511
+%for (row, v) in group1_parity:
+    .INITP_${row}(256'h${v}),
+%endfor
+
+    // Address 512 to 767
+%for (row, v) in group2_parity:
+    .INITP_${row}(256'h${v}),
+%endfor
+
+    // Address 768 to 1023
+%for (row, v) in group3_parity:
+    .INITP_${row}(256'h${v}),
+%endfor
+
+    // Output value upon SSR assertion
+    .SRVAL_A(18'h000000),
+    .SRVAL_B({BRAM_PORT_WIDTH{1'b0}})
+) ramdp_1024_x_18(
+    .DIA (18'h00000),
+    .ENA (enable),
+    .WEA (1'b0),
+    .RSTA(1'b0),
+    .CLKA (clk),
+    .ADDRA (address),
+    // swizzle the parity bits into their proper place
+    .DOA ({instruction[17],instruction[15:8],instruction[16],instruction[7:0]}),
+    .DIB (bram_dat_i),
+    // it's your OWN damn job to deswizzle outside this module
+    .DOB (bram_dat_o),
+    .ENB (bram_en_i),
+    .WEB ({BRAM_WE_WIDTH{bram_we_i}}),
+    .RSTB(1'b0),
+    .CLKB (clk),
+    .ADDRB(bram_adr_i)
+);
+
+endmodule
+'''
+
 
 def file_get_contents(filename):
     fin = open(filename)
@@ -149,7 +278,7 @@ class PBLDException(BaseException):
 
 def parse_commandline():
     s_config = 'ho:'
-    l_config = ['help']
+    l_config = ['help','dualport']
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], s_config, l_config)
@@ -263,7 +392,12 @@ def render(map_config, map_object, lst_data, lst_parity,debug_data):
     group2_parity = lst_parity[2*step:3*step]
     group3_parity = lst_parity[3*step:4*step]
 
-    tmpl = Template(tpl)
+    tmpl = None
+    if '--dualport' not in map_config:
+        tmpl = Template(tpl_oneport)
+    else:
+        tmpl = Template(tpl_dualport)
+        
     text = tmpl.render(
             project=map_config['--project'],
             ctime=map_object['ctime'],
@@ -282,7 +416,7 @@ def render(map_config, map_object, lst_data, lst_parity,debug_data):
 if __name__ == '__main__':
     map_config = parse_commandline()
     map_object = load_object(map_config)
-
+    
     # let's try to construct debugging info!
     labels = map_object['labels']
     # sort all labels by their address
