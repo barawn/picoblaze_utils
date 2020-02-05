@@ -45,11 +45,61 @@ tpl_oneport = '''\
  * target : kcpsm3
  */
 
-module ${project} (address, instruction, enable, clk);
+module ${project} (address, instruction, enable, clk, rdl)
+parameter USE_JTAG_LOADER = "FALSE";
+localparam BRAM_PORT_WIDTH = 18;
+localparam BRAM_ADR_WIDTH = (BRAM_PORT_WIDTH == 18) ? 10 : 11;
+localparam BRAM_WE_WIDTH = (BRAM_PORT_WIDTH == 18) ? 2 : 1;
 input [9:0] address;
 input clk;
 input enable;
 output [17:0] instruction;
+output rdl; // download reset
+
+wire [BRAM_ADR_WIDTH-1:0] jtag_addr;
+wire jtag_we;
+wire jtag_clk;
+wire [17:0] jtag_din;
+wire [17:0] bram_macro_din;
+wire [17:0] jtag_dout;
+wire [17:0] bram_macro_dout;
+wire jtag_en;
+
+// Note: JTAG loader's DIN goes to (15:0) DIBDI and (17:16) DIPBDIP.
+// Because we use the TDP macro, the parity is interspersed every byte,
+// meaning we need to swizzle it to
+// { jtag_din[17],jtag_din[8 +: 8],jtag_din[16],jtag_din[0 +: 8] }
+// and when going back, we need to do
+// { bram_macro_dout[17], bram_macro_dout[8], bram_macro_dout[9 +: 8], bram_macro_dout[0 +: 8] }
+assign bram_macro_din = { jtag_din[17], jtag_din[8 +: 8],    // byte 1
+                          jtag_din[16], jtag_din[0 +: 8] };  // byte 0
+assign jtag_dout = { bram_macro_dout[17], bram_macro_dout[8],            // parity
+                     bram_macro_dout[9 +: 8], bram_macro_dout[0 +: 8] }; // data
+
+generate
+  if (USE_JTAG_LOADER == "YES" || USE_JTAG_LOADER == "TRUE") begin : JL
+     jtag_loader_6 #(.C_JTAG_LOADER_ENABLE(1),
+                     .C_FAMILY("7S"),
+                     .C_NUM_PICOBLAZE(1),
+                     .C_BRAM_MAX_ADDR_WIDTH(10),
+                     .C_PICOBLAZE_INSTRUCTION_DATA_WIDTH(18),
+                     .C_JTAG_CHAIN(2),
+                     .C_ADDR_WIDTH_0(10))
+                   u_loader( .picoblaze_reset(rdl),
+                             .jtag_en(jtag_en),
+                             .jtag_din(jtag_din),
+                             .jtag_addr(jtag_addr),
+                             .jtag_clk(jtag_clk),
+                             .jtag_we(jtag_we),
+                             .jtag_dout_0(jtag_dout));
+  end else begin : NOJL
+     assign jtag_en = 0;
+     assign jtag_we = 0;
+     assign jtag_clk = 0;
+     assign jtag_din = {18{1'b0}};
+     assign jtag_adr = {BRAM_ADR_WIDTH{1'b0}};
+  end
+end generate
 
 // Debugging symbols. Note that they're
 // only 48 characters long max.
@@ -66,9 +116,20 @@ output [17:0] instruction;
    end
 // synthesis translate_on
 
-RAMB16_S18 #(
-    .INIT(18'h00000),
 
+BRAM_TDP_MACRO #(
+    .BRAM_SIZE("18Kb"),
+    .DOA_REG(0),
+    .DOB_REG(0),
+    .INIT_A(18'h00000),
+    .INIT_B(18'h00000),
+    .READ_WIDTH_A(18),
+    .WRITE_WIDTH_A(18),
+    .READ_WIDTH_B(BRAM_PORT_WIDTH),
+    .WRITE_WIDTH_B(BRAM_PORT_WIDTH),
+    .SIM_COLLISION_CHECK("ALL"),
+    .WRITE_MODE_A("WRITE_FIRST"),
+    .WRITE_MODE_B("WRITE_FIRST"),
     // The following INIT_xx declarations specify the initial contents of the RAM
     // Address 0 to 255
 %for (row, v) in group0_data:
@@ -112,22 +173,29 @@ RAMB16_S18 #(
 %endfor
 
     // Output value upon SSR assertion
-    .SRVAL(18'h000000),
-    .WRITE_MODE("WRITE_FIRST")
-) ram_1024_x_18(
-    .DI  (16'h0000),
-    .DIP  (2'b00),
-    .EN (enable),
-    .WE (1'b0),
-    .SSR (1'b0),
-    .CLK (clk),
-    .ADDR (address),
-    .DO (instruction[15:0]),
-    .DOP (instruction[17:16])
+    .SRVAL_A(18'h000000),
+    .SRVAL_B({BRAM_PORT_WIDTH{1'b0}})
+) ramdp_1024_x_18(
+    .DIA (18'h00000),
+    .ENA (enable),
+    .WEA ({BRAM_WE_WIDTH{1'b0}}),
+    .RSTA(1'b0),
+    .CLKA (clk),
+    .ADDRA (address),
+    // swizzle the parity bits into their proper place
+    .DOA ({instruction[17],instruction[15:8],instruction[16],instruction[7:0]}),
+    .DIB (bram_macro_din),
+    .DOB (bram_macro_dout),
+    .ENB (jtag_en),
+    .WEB ({BRAM_WE_WIDTH{jtag_we}}),
+    .RSTB(1'b0),
+    .CLKB (jtag_clk),
+    .ADDRB(jtag_addr)
 );
 
 endmodule
 '''
+
 
 tpl_dualport = '''\
 `timescale 1 ps / 1ps
@@ -235,7 +303,7 @@ BRAM_TDP_MACRO #(
 ) ramdp_1024_x_18(
     .DIA (18'h00000),
     .ENA (enable),
-    .WEA (1'b0),
+    .WEA ({BRAM_WE_WIDTH{1'b0}}),
     .RSTA(1'b0),
     .CLKA (clk),
     .ADDRA (address),
