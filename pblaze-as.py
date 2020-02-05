@@ -944,6 +944,7 @@ def _get_kcpsm6_assembler():
         'load'      :(0x00000, _assembly_alu),
         'move'      :(0x00000, _assembly_alu),
         'mov'       :(0x00000, _assembly_alu),
+        'star'      :(0x16000, _assembly_alu),
 
         'input'     :(0x08000, _assembly_alu),
         'fetch'     :(0x0A000, _assembly_alu),
