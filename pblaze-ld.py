@@ -45,7 +45,7 @@ tpl_oneport = '''\
  * target : kcpsm3
  */
 
-module ${project} (address, instruction, enable, clk, rdl)
+module ${project} (address, instruction, enable, clk, rdl);
 parameter USE_JTAG_LOADER = "FALSE";
 localparam BRAM_PORT_WIDTH = 18;
 localparam BRAM_ADR_WIDTH = (BRAM_PORT_WIDTH == 18) ? 10 : 11;
@@ -97,9 +97,9 @@ generate
      assign jtag_we = 0;
      assign jtag_clk = 0;
      assign jtag_din = {18{1'b0}};
-     assign jtag_adr = {BRAM_ADR_WIDTH{1'b0}};
+     assign jtag_addr = {BRAM_ADR_WIDTH{1'b0}};
   end
-end generate
+endgenerate
 
 // Debugging symbols. Note that they're
 // only 48 characters long max.
