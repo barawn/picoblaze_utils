@@ -91,7 +91,14 @@ generate
                              .jtag_addr(jtag_addr),
                              .jtag_clk(jtag_clk),
                              .jtag_we(jtag_we),
-                             .jtag_dout_0(jtag_dout));
+                             .jtag_dout_0(jtag_dout),
+                             .jtag_dout_1('b0),
+                             .jtag_dout_2('b0),
+                             .jtag_dout_3('b0),
+                             .jtag_dout_4('b0),
+                             .jtag_dout_5('b0),
+                             .jtag_dout_6('b0),
+                             .jtag_dout_7('b0));
   end else begin : NOJL
      assign jtag_en = 0;
      assign jtag_we = 0;
