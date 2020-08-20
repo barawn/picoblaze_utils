@@ -128,6 +128,10 @@ def _parse_param(param):
         if super_verbose == True:
             print "match multi-register"
         return param
+    elif re.match(r'^[&](s[0-9A-F].)*s[0-9A-F]$',param):
+        if super_verbose == True:
+            print "match multi-register"
+        return param[1:]
     else:
         try:
             res = {'val':0}
@@ -1625,10 +1629,21 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         if type(param1) == str:
                             print "register/register operation"
                             if len(param1.split('.')) != nregs:
-                                msg = 'Paired registers operations need pairs of operands "%s"' % (str(line))
-                                raise ParseException(msg)
-                            operands = param1.split('.')
-                            operands.reverse()
+                                #  msg = 'Paired registers operations need pairs of operands "%s"' % (str(line))
+                                #  raise ParseException(msg)                                
+                                print "warning: paired register operations with fewer operands (%s)" % (str(line))
+                                print "         padding missing operands with 0 (this is OK, just letting you know)"
+                                if len == 0:
+                                    operands.append(param1)
+                                else:
+                                    operands=param1.split('.')
+                                    operands.reverse()
+                                for num in range(nregs-len(operands)):
+                                    operands.append(0)
+                                print "operands: ", operands
+                            else:
+                                operands = param1.split('.')
+                                operands.reverse()
                         else:
                             for num in range(nregs):
                                 operands.append((param1>>8*num) & 0xFF)
@@ -1821,7 +1836,7 @@ usage : %s [option] file
 ''' % os.path.split(sys.argv[0])[1]
 
 def parse_commandline():
-    format_s = 'I:o:ghl'
+    format_s = 'I:o:ghlv'
     format_l = []
     opts, args = getopt.getopt(sys.argv[1:], format_s, format_l)
 
@@ -1850,6 +1865,9 @@ if __name__ == '__main__':
             print usage
             sys.exit(-1)
 
+        if '-v' in map_options:
+            super_verbose = True
+            
         if '-o' not in map_options:
             fn_name = os.path.split(lst_args[0])[1]
             fn_out = os.path.splitext(fn_name)[0] + '.s'
@@ -1899,8 +1917,9 @@ if __name__ == '__main__':
         #
         # The 'f' option here inserts lines between unrelated blocks:
         # - this is needed to identify single-line whiles versus do-whiles.
-        # 
-        args = ['astyle.exe', '-f', '-j', '--style=gnu', '--suffix=none']
+        #
+        # -p pads around operators to help Python
+        args = ['astyle.exe', '-f', '-j', '-p','--style=gnu', '--suffix=none']
         (returncode, stdout_text, stderr_text) = popen(args, stdout_text)
         if returncode == 0:
             if '-g' in map_options:
