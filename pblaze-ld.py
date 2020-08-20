@@ -346,6 +346,7 @@ usage: %s [option] [file]
 
   -h                print this help
   -o <file>         Place output into <file>, '-' is stdout.
+  --dualport        Use a dualport RAM to share RAM usage (no JTAG loader option)
 ''' % os.path.split(sys.argv[0])[1]
 
 class PBLDException(BaseException):
