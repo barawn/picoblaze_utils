@@ -1,6 +1,8 @@
 picoblaze_utils
 ===============
 
+Note: you need astyle and mcpp to use this.
+
 picoblaze c-compiler and assembly and linker writing in python.
 
 
