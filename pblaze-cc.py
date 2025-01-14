@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 #  
 #  Copyright 2013 buaa.byl@gmail.com
@@ -8,7 +8,7 @@
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2, or (at your option)
 #  any later version.
-#x
+#
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -37,7 +37,7 @@ import hashlib
 import types
 import subprocess
 import getopt
-from StringIO import StringIO
+from io import StringIO
 
 BASEADDR_INTC_CLEAR = 0xF0
 
@@ -114,8 +114,8 @@ def popen(args, stdin=None):
 def _parse_param(param):
     param = re.sub(r'[ ]+', '', param)
     if super_verbose == True:
-        print "parsing"
-        print param
+        print("parsing")
+        print(param)
     if len(param) == 0:
         return param
     elif re.match(r'[Z|C]', param):
@@ -126,11 +126,11 @@ def _parse_param(param):
         return param[1:]
     elif re.match(r'^(s[0-9A-F].)*s[0-9A-F]$',param):
         if super_verbose == True:
-            print "match multi-register"
+            print("match multi-register")
         return param
     elif re.match(r'^[&](s[0-9A-F].)*s[0-9A-F]$',param):
         if super_verbose == True:
-            print "match multi-register"
+            print("match multi-register")
         return param[1:]
     else:
         try:
@@ -258,10 +258,10 @@ def parse_condition(info, line):
     #let's try recognizing if (!( blah ))    
     res = re.match(r'(if|else if|while)\s*\(!(\(.*\))\)', line)
     if res:
-        print "recognized an inverted comparison, try to flop its logic later"
+        print("recognized an inverted comparison, try to flop its logic later")
         inverted = True
         newline = "%s %s" % ( res.groups()[0] , res.groups()[1])        
-        print "converting '%s' to inverted '%s'" % ( line , newline )
+        print("converting '%s' to inverted '%s'" % ( line , newline ))
         line = newline
 
     #fmt: if (var--)
@@ -279,7 +279,7 @@ def parse_condition(info, line):
 
         if cond == 'while' and end_while:
             if super_verbose == True:
-                print "while and end_while"
+                print("while and end_while")
             info.lines.append([info.level, info.lineno, 'dowhile',
                 [compare, _parse_param(param0), _parse_param(param1)]])
             return True        
@@ -309,7 +309,7 @@ def parse_condition(info, line):
         
         if cond == 'while' and end_while:
             if super_verbose == True:
-                print "while and end_while"
+                print("while and end_while")
             info.lines.append([info.level, info.lineno, 'dowhile',
                 [compare, _parse_param(param0), _parse_param(param1)]])
             return True        
@@ -358,7 +358,7 @@ def parse_condition(info, line):
                 compare = '^'
             elif compare == '^':
                 compare = '&'
-            print "inverted '%s' became '%s %s %s %s'" % (line, cond, param0, compare, param1)
+            print("inverted '%s' became '%s %s %s %s'" % (line, cond, param0, compare, param1))
                         
         if cond == 'while' and end_while:
             info.lines.append([info.level, info.lineno, 'dowhile',
@@ -391,7 +391,7 @@ def parse_condition(info, line):
                 compare = ">"
             elif compare == ">=":
                 compare = "<"
-            print "'%s' became '%s %s %s %s'" % (line, cond, param0, compare, param1)
+            print("'%s' became '%s %s %s %s'" % (line, cond, param0, compare, param1))
         
         if cond == 'while' and end_while:
             info.lines.append([info.level, info.lineno, 'dowhile',
@@ -454,11 +454,11 @@ def parse_assign(info, line):
 
 def parse_label(info, line):
     if super_verbose == True:
-        print "Parsing %s" % line
+        print("Parsing %s" % line)
     res = re.match(r'(\w+)\s*:', line)
     if res:
         if super_verbose == True:
-            print "found label"
+            print("found label")
         ret = None
         name = res.groups()[0]
         params = None
@@ -470,27 +470,27 @@ def parse_label(info, line):
 
 def parse_funcdecl(info, line):
     if super_verbose == True:
-        print "Parsing %s" % line
+        print("Parsing %s" % line)
     #ignore normal function declare
     if re.match(r'(\w+) (\w+)\s*\(([^\(\)]*)\);$', line):
         if super_verbose == True:
-            print "not a function"
+            print("not a function")
         return True
 
     #parse __attribute__ ((...))
     res = re.match(r'(\w+) (\w+)\s*\((.*)\) (.*);$', line)
     if info.level == 0 and res:
         if super_verbose == True:
-            print "found function at %s" % line
+            print("found function at %s" % line)
         ret = res.groups()[0]
         name = res.groups()[1]
         params = res.groups()[2]
         attributes = res.groups()[3]
         if super_verbose == True:
-            print "ret %s" % ret
-            print "name %s" % name
-            print "params %s" % params
-            print "attributes %s" % attributes
+            print("ret %s" % ret)
+            print("name %s" % name)
+            print("params %s" % params)
+            print("attributes %s" % attributes)
         info.lines.append([info.level, info.lineno, 'funcdecl', 
             [name, ret, params, attributes]])
         return True
@@ -499,14 +499,14 @@ def parse_funcdecl(info, line):
 
 def parse_funcdef(info, line):
     if super_verbose == True:
-        print "parsing %s" % line
+        print("parsing %s" % line)
     line = re.sub(r'[; ]+$', '', line)
     if super_verbose == True:
-        print "subbed to %s" % line
+        print("subbed to %s" % line)
     res = re.match(r'(\w+) (\w+)\s*\((.*)\)$', line)
     if info.level == 0 and res:
         if super_verbose == True:
-            print "function"
+            print("function")
         ret = res.groups()[0]
         name = res.groups()[1]
         params = res.groups()[2]
@@ -581,9 +581,9 @@ def parse(text):
             raise ParseException(msg)
 
     if super_verbose == True:
-        print "info line dump"
+        print("info line dump")
         for line in info.lines:
-            print line
+            print(line)
     # We need to reprocess the lines to look to see if we misidentified
     # a while() statement as a do/while loop.
     # Because of the astyle processing, this actually only happens
@@ -601,8 +601,8 @@ def parse(text):
             if idx == 0:
                 # if idx is zero, we've definitely effed it up
                 # don't know how that would happen, buuuut
-                print "Single-line while (line 0)"
-                print "Line is:", line[IDX_CODE]
+                print("Single-line while (line 0)")
+                print("Line is:", line[IDX_CODE])
                 singlewhile = True
             else:
                 test_lineno = line[IDX_LINENO]
@@ -610,16 +610,16 @@ def parse(text):
                 previous_type = info.lines[idx-1][IDX_TYPE]
                 previous_lineno = info.lines[idx-1][IDX_LINENO]
                 if previous_type != 'block':
-                    print "Single-line while at %d (previous type is %s)" % (test_lineno, previous_type)
-                    print "Line is:", line[IDX_CODE]
+                    print("Single-line while at %d (previous type is %s)" % (test_lineno, previous_type))
+                    print("Line is:", line[IDX_CODE])
                     singlewhile = True
                 elif previous_code != '}':
-                    print "Single-line while at %d (previous block is %s)" % (test_lineno, previous_code)
-                    print "Line is:", line[IDX_CODE]
+                    print("Single-line while at %d (previous block is %s)" % (test_lineno, previous_code))
+                    print("Line is:", line[IDX_CODE])
                     singlewhile = True
                 elif (test_lineno - previous_lineno != 1):
-                    print "Single-line while at %d (previous closing brace at %d)" % (test_lineno, previous_lineno)
-                    print "Line is:", line[IDX_CODE]
+                    print("Single-line while at %d (previous closing brace at %d)" % (test_lineno, previous_lineno))
+                    print("Line is:", line[IDX_CODE])
                     singlewhile = True
             if singlewhile:
                 info.lines[idx][IDX_TYPE] = 'singlewhile'
@@ -675,7 +675,7 @@ def convert_list_to_block(info):
             res = re.match('__attribute__[ \t]*\(\((.+)\W*\((.+)\)\)\)', attributes)
             res2 = re.match('__attribute__\s*\(\(\s*(\w+)\s*\)\)', attributes)
             if res:
-                print "complex attribute match"
+                print("complex attribute match")
                 clear_attrs = []
                 attrs = res.groups()
                 for attr in attrs:
@@ -683,7 +683,7 @@ def convert_list_to_block(info):
                     attr = re.sub('[ ]+$', '', attr)
                     if re.match(r'"(.+)"', attr):
                         to_append = re.match(r'"(.+)"', attr).groups()[0]
-                        print "appending", to_append
+                        print("appending", to_append)
                         clear_attrs.append(to_append)
                     else:
                         clear_attrs.append(attr)
@@ -692,7 +692,7 @@ def convert_list_to_block(info):
             elif res2:
                 attr = res2.groups()[0]
                 if attr == "noreturn":
-                    print "Function '%s' with attribute noreturn, adding to label list" % name
+                    print("Function '%s' with attribute noreturn, adding to label list" % name)
                     labels.append(name)
             else:
                 msg = 'Unknow attribute format "%s"' % attribute
@@ -702,14 +702,14 @@ def convert_list_to_block(info):
             body = [line]
             map_function[name] = body
             if super_verbose == True:
-                print "new function", name
+                print("new function", name)
         elif t == 'file':
             body.insert(0, line)
         elif t == 'block':
             continue
         else:
             if super_verbose == True:
-                print "adding", line, "to function"
+                print("adding", line, "to function")
             body.append(line)
 
     ##debug
@@ -736,7 +736,7 @@ def convert_list_to_block(info):
 
             if t == 'file':
                 fpath = code[0]
-                label_prefix = 'L_%s_' % hashlib.md5(fpath).hexdigest()
+                label_prefix = 'L_%s_' % hashlib.md5(fpath.encode()).hexdigest()
                 i += 1
 
             elif level != curr_level or t in ['do', 'singlewhile', 'dowhile', 'while', 'if',
@@ -1002,16 +1002,16 @@ def convert_condition_to_ifgoto2(map_function):
     #
     for name in map_function:
         if super_verbose == True:
-            print "processing function", name
+            print("processing function", name)
         lst_block = map_function[name]
 
         map_forward = {}
         map_backward = {}
 
         if super_verbose == True:
-            print "lst_block dump"
+            print("lst_block dump")
             for block in lst_block:
-                print block
+                print(block)
 
         idx_block = 0
         while idx_block < len(lst_block):
@@ -1020,7 +1020,7 @@ def convert_condition_to_ifgoto2(map_function):
             level = first_line[IDX_LEVEL]
 
             if super_verbose == True:
-                print idx_block, "first_line ", first_line, "level", level
+                print(idx_block, "first_line ", first_line, "level", level)
 
             # single whiles are special, they have no body of code to jump to.
             # so you don't want to look for the next label (which is the label after the compare)
@@ -1029,7 +1029,7 @@ def convert_condition_to_ifgoto2(map_function):
             if first_line[IDX_TYPE] in ['singlewhile']:
                 # loops back to itself
                 if super_verbose == True:
-                    print "singlewhile labelling"
+                    print("singlewhile labelling")
                 label_t_next = lst_block[idx_block][0]
                 label_f_next = find_next_label(lst_block[idx_block+1:], level)
                 first_line[IDX_CODE].append(label_t_next)
@@ -1038,7 +1038,7 @@ def convert_condition_to_ifgoto2(map_function):
                 if idx_block+1 < len(lst_block):
                     label_t_next = lst_block[idx_block+1][0]
                     if super_verbose == True:
-                        print "label_t_next ", label_t_next                    
+                        print("label_t_next ", label_t_next)                    
                 else:
                     label_t_next = '(END)'
                 label_f_next = find_next_label(lst_block[idx_block+1:], level)
@@ -1073,8 +1073,8 @@ def convert_condition_to_ifgoto2(map_function):
                     label_f_next = '(END)'
 
                 if super_verbose == True:
-                    print label_t_next
-                    print label_f_next
+                    print(label_t_next)
+                    print(label_f_next)
                 first_line[IDX_CODE].append(label_t_next)
                 first_line[IDX_CODE].append(label_f_next)
 
@@ -1084,7 +1084,7 @@ def convert_condition_to_ifgoto2(map_function):
     for name in map_function:
         lst_block = map_function[name]
         if super_verbose == True:
-            print "processing ", name
+            print("processing ", name)
 
         for idx_block in range(len(lst_block)):
             label, block = lst_block[idx_block]
@@ -1092,7 +1092,7 @@ def convert_condition_to_ifgoto2(map_function):
             level = first_line[IDX_LEVEL]
             if name == "init":
                 if super_verbose == True:
-                    print "first_line ", first_line
+                    print("first_line ", first_line)
             if first_line[IDX_TYPE] == 'ifjoin':
                 label_bb = find_next_endif_label(lst_block[idx_block+1:], level)
                 first_line[IDX_CODE].append(label_bb)
@@ -1132,7 +1132,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
 
     if super_verbose == True:
         for name in map_function:
-            print "Found function: %s" % name
+            print("Found function: %s" % name)
     
     #boot section
     f.write(';%s' % ('-' * 60))
@@ -1140,8 +1140,8 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
     f.write('address 0x000')
     f.write('\n')
     #support init/no init style
-    keylist = map_function.keys()
-    if "init" in map_function.keys():
+    keylist = list(map_function.keys())
+    if "init" in list(map_function.keys()):
         f.write('boot:')
         f.write('\n')    
         f.write('  call init')
@@ -1149,7 +1149,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
         # fill address 1/2/3 with nothing
         if vivado_boot_fix == True:
             f.write('; Vivado Hardware Manager workaround - avoid corruption at address 3\n')
-            if "loop" in map_function.keys():
+            if "loop" in list(map_function.keys()):
                 # we can skip over instructions here to save 4 cycles. WOOOOO
                 f.write('  jump loop\n')
             else:
@@ -1166,7 +1166,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
             f.write('  load s0, s0\n')
             f.write('  load s0, s0\n')
     #support loop/no loop style
-    if "loop" in map_function.keys():
+    if "loop" in list(map_function.keys()):
         # loop is present, sort it first
         keylist.insert(0,keylist.pop(keylist.index("loop")))
     else:
@@ -1184,13 +1184,13 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
         #check if isr
         if name in map_attribute:
             attr = map_attribute[name]
-            print "attribute: %s" % attr
+            print("attribute: %s" % attr)
             if attr[0] == 'at':
                 f.write('address %s' % attr[1])
                 f.write('\n')
             elif attr[0] == 'interrupt':
                 vec = attr[1].upper()
-                print "interrupt attribute had", vec                
+                print("interrupt attribute had", vec)                
                 # yeah, whatever, just use 0x3D0 for now
                 #num  = re.search(r'IRQ(\d+)', attr[1].upper()).groups()[0]
                 #num  = int(num)
@@ -1229,9 +1229,9 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
 
             for line in block:
                 if super_verbose == True:
-                    print line
+                    print(line)
                 level, lineno, t, code = line
-
+                level = int(level)
                 if t not in ['file']:
                     f.write(' ;%s:%d' % (fn_source, lineno))
                     f.write('\n')
@@ -1319,14 +1319,22 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     f.write('\n')
 
                 elif t == 'funccall':
-                    if code[0] in ['enable_interrupt', 'disable_interrupt']:
+                    if code[0] in ['enable_interrupt',
+                                   'disable_interrupt']:
                         f.write('  ' * level)
                         f.write('  %s' % code[0].replace('_', ' '))
+                        f.write('\n')
+                    elif code[0] in ['regbank']:
+                        if type(code[1][0]) != int or (code[1][0] != 0 and code[1][0] != 1):
+                            msg = 'regbank requires either 0/1: "%s"' % (str(line))
+                            raise ParseException(msg)
+                        f.write('  ' * level)
+                        f.write('  %s %s' % (code[0], 'A' if code[1][0] == 0 else 'B'))
                         f.write('\n')
                     elif code[0] in ['input', 'output', 'outputk', 'fetch', 'store']:
                         # check outputk
                         if code[0] == 'outputk':
-                            if type(code[1][0]) != types.IntType or type(code[1][1]) != types.IntType:
+                            if type(code[1][0]) != int or type(code[1][1]) != int:
                                 msg = 'outputk requires constant address and value: "%s"' % (str(line))
                                 raise ParseException(msg)                            
                         # check multi-operand.
@@ -1338,7 +1346,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             regs = code[1][1].split('.')
                             numops = len(regs)
                         if numops > 1:
-                            if type(code[1][0]) != types.IntType:
+                            if type(code[1][0]) != int:
                                 msg = 'Multi-operand IO/memory operations require constant address: "%s"' % \
                                     (str(line))
                                 raise ParseException(msg)
@@ -1352,7 +1360,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                 f.write('  ' * level)
                                 f.write('  %s %s, (%s)' % (code[0], code[1][1], code[1][0]))
                                 f.write('\n')
-                            elif type(code[1][0]) == types.IntType:
+                            elif type(code[1][0]) == int:
                                 f.write('  ' * level)
                                 f.write('  %s %s, %d' % (code[0], code[1][1], code[1][0]))
                                 f.write('\n')
@@ -1397,14 +1405,14 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         inverted = True
                         compare = compare[1:]
                         if super_verbose == True:
-                            print "inverted ",
+                            print("inverted ", end=' ')
                         
                     if super_verbose == True:
-                        print "compare ", compare, " param0 ", param0, " param1 ", param1
+                        print("compare ", compare, " param0 ", param0, " param1 ", param1)
 
                     #check if const value
-                    if type(param0) == types.IntType and \
-                            type(param1) == types.IntType:
+                    if type(param0) == int and \
+                            type(param1) == int:
                         res = {'val':0}
                         text = 'val = %s %s %s' % (param0, compare, param1)
                         exec(text, {}, res)
@@ -1422,8 +1430,8 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             else:
                                 compare = '!='
                             param1  = 's0'
-                    elif type(param0) == types.IntType and \
-                            type(param1) != types.IntType:
+                    elif type(param0) == int and \
+                            type(param1) != int:
                         msg = 'Param0 must be register when Param1 is digit! "%s"' % \
                                 (str(line))
                         raise ParseException(msg)
@@ -1441,7 +1449,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     if compare in ['==', '!=', '<', '>=']:
                         if param0 == 'Z' or param0 == 'C':
                             if super_verbose == True:
-                                print "condition check: ", param0, compare, param1
+                                print("condition check: ", param0, compare, param1)
                             if param1 != 0 or compare == '<' or compare == '>=':
                                 msg = 'Condition checks are only == 0 or != 0'
                                 raise ParseException(msg)
@@ -1461,7 +1469,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             regs.reverse()
                             operands = []
                             nregs = len(param0.split('.'))
-                            print "multi-register compare: %d regs" % nregs
+                            print("multi-register compare: %d regs" % nregs)
                             if type(param1) == str:
                                 if len(param1.split('.')) != nregs:
                                     msg = 'Multi-register operations need equal # of operands "%s"' % (str(line))
@@ -1472,8 +1480,8 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             else:
                                 for num in range(nregs):
                                     operands.append((param1 >> 8*num) & 0xFF)
-                            print "regs: ", regs
-                            print "operands: ", operands
+                            print("regs: ", regs)
+                            print("operands: ", operands)
                             for num in range(nregs):
                                 if num == 0:
                                     f.write('  compare %s, %s' % (regs[num], str(operands[num])))
@@ -1488,7 +1496,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         f.write('  test %s, %s' % (str(param0), str(param1)))
                     elif compare in ['--']:
                         if len(param0.split('.')) > 1:
-                            print "multi register subtract-test:", param0, compare
+                            print("multi register subtract-test:", param0, compare)
                             regs = param0.split('.')
                             regs.reverse()
                             for num in range(len(regs)):
@@ -1500,7 +1508,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                     f.write('  subcy %s, 0' % (str(regs[num])))
                         else:
                             if super_verbose == True:
-                                print "subtract-test"
+                                print("subtract-test")
                             f.write('  sub %s, 1' % (str(param0)))
                         
                     f.write('\n')
@@ -1534,23 +1542,23 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         flage_f = 'NZ'
                     elif compare == '--':
                         if super_verbose == True:
-                            print "subtract-test: ",
+                            print("subtract-test: ", end=' ')
                         # carry test: this is s0--. True if not C.
                         if param1 == -1:
                             if super_verbose == True:
-                                print "test-subtract"
+                                print("test-subtract")
                             flage_t = 'NC'
                             flage_f = 'C'
                         # carry test: this is !(s0--). True if C.
                         elif param1 == -2:
                             if super_verbose == True:
-                                print "test-subtract inverted"
+                                print("test-subtract inverted")
                             flage_t = 'C'
                             flage_f = 'NC'
                         elif param1 == 1:
                             # inverted: matches if Z, fails if NZ
                             if super_verbose == True:
-                                print "subtract-test inverted"
+                                print("subtract-test inverted")
                             flage_t = 'Z'
                             flage_f = 'NZ'
                         else:
@@ -1619,20 +1627,20 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     param1  = code[2]
                     if len(param0.split('.')) > 1:
                         # paired register math
-                        print "multi register assembly:", param0, assign_type, param1
+                        print("multi register assembly:", param0, assign_type, param1)
                         regs = param0.split('.')
                         regs.reverse()
                         nregs = len(regs)
                         operands = []
                         if super_verbose == True:
-                            print type(param1)
+                            print(type(param1))
                         if type(param1) == str:
-                            print "register/register operation"
+                            print("register/register operation")
                             if len(param1.split('.')) != nregs:
                                 #  msg = 'Paired registers operations need pairs of operands "%s"' % (str(line))
                                 #  raise ParseException(msg)                                
-                                print "warning: paired register operations with fewer operands (%s)" % (str(line))
-                                print "         padding missing operands with 0 (this is OK, just letting you know)"
+                                print("warning: paired register operations with fewer operands (%s)" % (str(line)))
+                                print("         padding missing operands with 0 (this is OK, just letting you know)")
                                 if len == 0:
                                     operands.append(param1)
                                 else:
@@ -1640,7 +1648,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                     operands.reverse()
                                 for num in range(nregs-len(operands)):
                                     operands.append(0)
-                                print "operands: ", operands
+                                print("operands: ", operands)
                             else:
                                 operands = param1.split('.')
                                 operands.reverse()
@@ -1721,8 +1729,8 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                     f.write('  %s %s, %s' % (op, regs[num], str(operands[num])))
                                     f.write('\n')
                                 else:
-                                    print "Note: ignoring '%s %s %s' NOP" % (regs[num], assign_type, operands[num])
-                                    print "      in multi-register operation."
+                                    print("Note: ignoring '%s %s %s' NOP" % (regs[num], assign_type, operands[num]))
+                                    print("      in multi-register operation.")
                                     
                         else:
                             msg = 'Unknown operator "%s"' % (str(line))
@@ -1850,7 +1858,7 @@ def parse_commandline():
             map_options[k] = v
 
     if '-h' in map_options:
-        print usage
+        print(usage)
         sys.exit(-1)        
 
     return map_options, args
@@ -1862,7 +1870,7 @@ if __name__ == '__main__':
         if '-l' in map_options:
             vivado_boot_fix = True
         if len(lst_args) == 0:
-            print usage
+            print(usage)
             sys.exit(-1)
 
         if '-v' in map_options:
@@ -1896,15 +1904,15 @@ if __name__ == '__main__':
 #        args.extend(['-e', 'utf-8', '-z', lst_args[0]])
         args.extend(['-e', 'utf-8', '-D', 'PBLAZE_CC', lst_args[0]])
         for arg in args:
-            print "preprocessor: %s" % arg
+            print("preprocessor: %s" % arg)
         (returncode, stdout_text, stderr_text) = popen(args)
         if returncode == 0:
             if '-g' in map_options:
-                print 'wrote %d bytes to "mcpp.stdout"' % len(stdout_text)
+                print('wrote %d bytes to "mcpp.stdout"' % len(stdout_text))
                 fn = '%s.mcpp.tmp' % map_options['path_noext']
                 file_put_contents(fn, stdout_text)
         else:
-            print stderr_text
+            print(stderr_text)
             raise ParseException('mcpp.exe error')
 
         #let lineno correct
@@ -1923,11 +1931,11 @@ if __name__ == '__main__':
         (returncode, stdout_text, stderr_text) = popen(args, stdout_text)
         if returncode == 0:
             if '-g' in map_options:
-                print 'wrote %d bytes to "astyle.stdout"' % len(stdout_text)
+                print('wrote %d bytes to "astyle.stdout"' % len(stdout_text))
                 fn = '%s.astyle.tmp' % map_options['path_noext']
                 file_put_contents(fn, stdout_text)
         else:
-            print stderr_text
+            print(stderr_text)
             raise ParseException('astyle.exe error')
 
         #parse text
@@ -1960,16 +1968,17 @@ if __name__ == '__main__':
         f.write(';#!pblaze-cc modify : %s\n' % time.ctime(t.st_mtime))
 
         #dump assembly result
-        print 'using BASEADDR_INTC_CLEAR = 0x%02x' % BASEADDR_INTC_CLEAR
+        print('using BASEADDR_INTC_CLEAR = 0x%02x' % BASEADDR_INTC_CLEAR)
         generate_assembly(map_function, map_attribute, f)
-        print 'wrote %d bytes to "%s"' % (f.tell(), map_options['-o'])
+        print('wrote %d bytes to "%s"' % (f.tell(), map_options['-o']))
         f.close()
 
 
     except ParseException as e:
         traceback.print_exc()
-        print e.msg
+        print(e.msg)
 
-    print
+    print()
+
 
 
