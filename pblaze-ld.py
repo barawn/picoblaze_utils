@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 #  
 #  Copyright 2013 buaa.byl@gmail.com
@@ -365,7 +365,7 @@ def parse_commandline():
             map_config[k] = v
 
         if ('-h' in map_config) or ('--help' in map_config) or len(args) == 0:
-            print usage
+            print(usage)
             sys.exit(0)
 
         if '-o' not in map_config:
@@ -384,9 +384,9 @@ def parse_commandline():
         map_config['-i'] = args[0]
 
     except PBLDException as e:
-        print e.msg
-        print
-        print usage
+        print(e.msg)
+        print()
+        print(usage)
         sys.exit(-1)
 
     return map_config
@@ -399,7 +399,7 @@ def load_object(map_config):
     #fill zero to fix 1024
     n_padding = 1024 - len(map_object['object'])
     if n_padding > 0:
-        print 'append %d zero to rom' % n_padding
+        print('append %d zero to rom' % n_padding)
         for i in range(n_padding):
             map_object['object'].append(0)
 
@@ -456,14 +456,14 @@ def convert_to_blockram(map_object):
 
 def render(map_config, map_object, lst_data, lst_parity,debug_data):
     n = len(lst_data)
-    step = n / 4
+    step = int(n / 4)
     group0_data = lst_data[0*step:1*step]
     group1_data = lst_data[1*step:2*step]
     group2_data = lst_data[2*step:3*step]
     group3_data = lst_data[3*step:4*step]
 
     n = len(lst_parity)
-    step = n / 4
+    step = int(n / 4)
     group0_parity = lst_parity[0*step:1*step]
     group1_parity = lst_parity[1*step:2*step]
     group2_parity = lst_parity[2*step:3*step]
@@ -497,7 +497,7 @@ if __name__ == '__main__':
     # let's try to construct debugging info!
     labels = map_object['labels']
     # sort all labels by their address
-    fn = sorted(labels.items(), key=lambda x: x[1])
+    fn = sorted(list(labels.items()), key=lambda x: x[1])
     fn.reverse()
     # get the first label
     nextline = fn.pop()
@@ -561,11 +561,12 @@ if __name__ == '__main__':
     text = '\n'.join(lst_text) + '\n' + text
 
     if map_config['-o'] == '-':
-        print text
+        print(text)
     else:
         file_put_contents(map_config['-o'], text)
-        print 'wrote %d bytes to "%s"' % \
-            (len(text), map_config['-o'])
+        print('wrote %d bytes to "%s"' % \
+            (len(text), map_config['-o']))
 
-    print
+    print()
+
 

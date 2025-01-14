@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 #  
 #  Copyright 2013 buaa.byl@gmail.com
@@ -404,13 +404,19 @@ def is_register(elem):
     return res
 
 def is_cdigit(elem):
-    if type(elem) == types.IntType:
+    if type(elem) == int:
         return True
 
-    if type(elem) == types.StringType:
+    # I don't think this works anymore in python3...
+    if type(elem) == bytes:
         if elem == '0':
             return True
-
+    # this does tho
+    if type(elem) == str:
+        if elem == '0':
+            return True
+        
+        
     res1 = regex_hex_digit.match(elem)
     res2 = regex_oct_digit.match(elem)
     res3 = regex_dec_digit.match(elem)
@@ -456,7 +462,7 @@ def _parse_instruction(s):
 #///////////////////////////////////////////////////////////////////////////////
 #element convert interface
 def _convert_digit(s):
-    if type(s) == types.IntType:
+    if type(s) == int:
         return s
     elif regex_hex_digit.match(s):
         return int(s, 16)
@@ -505,8 +511,8 @@ def _preprocess_embedded(result, symbols):
     try:
         exec(embedded_code, {}, symbols)
     except:
-        print '"%s" is illegal!' % result.string
-        print
+        print('"%s" is illegal!' % result.string)
+        print()
         raise
 
 def _preprocess_macro(result, lst_inner_asm, symbols):
@@ -819,7 +825,7 @@ def _assembly_alu(opcode, instruction, cfg):
     objhex = opcode
 
     if opcode == 0x2B000:
-        if type(sX) != types.IntType and types(sY) != types.IntType:
+        if type(sX) != int and types(sY) != int:
             raise PSMPPException('Unknown types of parameters')
         if sY > 15:
             raise PSMPPException('Parameter out of bounds')
@@ -828,9 +834,9 @@ def _assembly_alu(opcode, instruction, cfg):
 
     objhex = objhex | (_parse_register_name(sX) << 8)
         
-    if type(sY) == types.IntType:
+    if type(sY) == int:
         objhex = objhex | KK
-    elif type(sY) == types.StringType:
+    elif type(sY) == bytes or type(sY) == str:
         objhex = objhex | (_parse_register_name(sY) << 4)
     else:
         raise PSMPPException('Unknow type of parameters')
@@ -842,9 +848,9 @@ def _assembly_alu(opcode, instruction, cfg):
     # |kcpsm3|immediate|register |
     # |kcpsm6|register |immediate|
     # +------+---------+---------+
-    if type(sY) == types.IntType and '--kcpsm6' in cfg:
+    if type(sY) == int and '--kcpsm6' in cfg:
         objhex = objhex | 0x01000
-    if type(sY) == types.StringType and '--kcpsm3' in cfg:
+    if type(sY) == bytes and '--kcpsm3' in cfg:
         objhex = objhex | 0x01000
 
     return objhex
@@ -1011,18 +1017,18 @@ def parse_commandline(argv):
 
         if '-6' in map_config:
             map_config['--kcpsm6'] = True
-            print 'kcpsm6 mode'
+            print('kcpsm6 mode')
         elif '-3' in map_config:
             map_config['--kcpsm3'] = True
-            print 'kcpsm3 mode'
+            print('kcpsm3 mode')
         else:
             map_config['--kcpsm3'] = True
-            print 'default kcpsm3 mode'
+            print('default kcpsm3 mode')
 
         #check output mode
         if not ('--psm' in map_config or '--hex' in map_config or '--obj' in map_config):
             map_config['--obj'] = True
-            print 'default obj output mode'
+            print('default obj output mode')
             #raise PSMPPException('Unknow output mode!')
 
         #check input file name
@@ -1050,8 +1056,8 @@ def parse_commandline(argv):
                 map_config['-o'] = name_without_ext + '.obj'
 
     except PSMPPException as e:
-        print 'PSMPPException:', e.msg
-        print
+        print('PSMPPException:', e.msg)
+        print()
         print_usage()
         sys.exit(-1)
     except getopt.GetoptError:  
@@ -1099,27 +1105,27 @@ def preprocess(lines, symbols):
 
         #end of for line in lines:
     except PSMPPException as e:
-        print e.msg
-        print
-        print 'Dump:'
+        print(e.msg)
+        print()
+        print('Dump:')
         for ins in lst_inner_asm:
-            print '', ins
+            print('', ins)
 
-        print '-' * 80
+        print('-' * 80)
         for sym in sorted(symbols):
-            print '%-30s : %s' % (sym, repr(symbols[sym]))
-        print '-' * 80
+            print('%-30s : %s' % (sym, repr(symbols[sym])))
+        print('-' * 80)
         raise
 
     except DefaultException as e:
-        print 'Dump:'
+        print('Dump:')
         for ins in lst_inner_asm:
-            print '', ins
+            print('', ins)
 
-        print '-' * 80
+        print('-' * 80)
         for sym in sorted(symbols):
-            print '%-30s : %s' % (sym, repr(symbols[sym]))
-        print '-' * 80
+            print('%-30s : %s' % (sym, repr(symbols[sym])))
+        print('-' * 80)
         raise
 
     return lst_inner_asm
@@ -1141,7 +1147,7 @@ def dump_hex(lines, cfg):
         try:
             opname = instruction[0]
             if opname not in lut:
-                print instruction
+                print(instruction)
                 raise PSMPPException('Unsupport instruction!')
 
             opcode, generator = lut[opname]
@@ -1150,10 +1156,10 @@ def dump_hex(lines, cfg):
             text.append(objhex)
 
         except:
-            print 'Error:', instruction
+            print('Error:', instruction)
             raise
 
-    print 'codes %d of 1024 rom (%d%%)'  % (nr_codes, (nr_codes * 100 / 1024))
+    print('codes %d of 1024 rom (%d%%)'  % (nr_codes, (nr_codes * 100 / 1024)))
 
     return (map_label_address, text)
 
@@ -1194,14 +1200,14 @@ def dump_asm(lines):
 def dump_ximem(rom):
     n = len(rom)
     erom = copy.deepcopy(rom)
-    for i in xrange(n,1024):
+    for i in range(n,1024):
         erom.append(0)
 
     n = len(erom)
     l = ['@00000000']
     rec = ''
 
-    for i in xrange(n):
+    for i in range(n):
         if (i % 8) == 0:
             if i != 0:
                 l.append(rec)
@@ -1234,22 +1240,22 @@ def pblaze_as(argv):
         try:
             text = dump_asm(lines)
         except PSMPPException as e:
-            print e.msg
+            print(e.msg)
             sys.exit(-1)
 
         if map_config['-o'] == '-':
-            print text
+            print(text)
         else:
             #dump assembly
             file_put_contents(map_config['-o'], text)
-            print 'wrote %d bytes to "%s"' % \
-                    (len(text), map_config['-o'])
+            print('wrote %d bytes to "%s"' % \
+                    (len(text), map_config['-o']))
 
     if '--hex' in map_config or '--obj' in map_config or '--mem' in map_config:
         try:
             (map_label_address, lst_hexvalues) = dump_hex(lines, map_config)
         except PSMPPException as e:
-            print e.msg
+            print(e.msg)
             sys.exit(-1)
 
         #convert to ascii hex file
@@ -1258,7 +1264,7 @@ def pblaze_as(argv):
             lst_hexstring.append('%05X' % d)
 
         #format label
-        lst_labels_address = sorted(map_label_address.items(), key = lambda x:x[1])
+        lst_labels_address = sorted(list(map_label_address.items()), key = lambda x:x[1])
         lst_labels = []
         for (k, v) in lst_labels_address:
             lst_labels.append(' (%05X, %s)' % (v, k))
@@ -1268,19 +1274,19 @@ def pblaze_as(argv):
             hexstring    = '\n'.join(lst_hexstring)
 
             if map_config['-o'] == '-':
-                print hexstring
+                print(hexstring)
             else:
                 file_put_contents(map_config['-o'], hexstring)
-                print 'wrote %d bytes to "%s"' % \
-                        (len(hexstring), map_config['-o'])
+                print('wrote %d bytes to "%s"' % \
+                        (len(hexstring), map_config['-o']))
 
         if '--mem' in map_config:
             l = dump_ximem(lst_hexvalues)
             d = '\n'.join(l)
             fn = map_config['--noext'] + '.mem'
             file_put_contents(fn, d)
-            print 'wrote %d bytes to "%s"' % \
-                    (len(d), fn)
+            print('wrote %d bytes to "%s"' % \
+                    (len(d), fn))
 
         if '--obj' in map_config:
             map_object = {}
@@ -1293,80 +1299,81 @@ def pblaze_as(argv):
 
             text_json = json.dumps(map_object, sort_keys=True, indent=4)
             file_put_contents(map_config['-o'], text_json)
-            print 'wrote %d bytes to "%s"' % \
-                (len(text_json), map_config['-o'])
+            print('wrote %d bytes to "%s"' % \
+                (len(text_json), map_config['-o']))
 
     if '-g' in map_config:
         if len(lines) > 0:
             json_filename = map_config['--noext'] + '.parsed'
             text_json = json.dumps(lines, indent=4)
             file_put_contents(json_filename, text_json)
-            print 'wrote %d bytes to "%s"' % \
-                    (len(text_json), json_filename)
+            print('wrote %d bytes to "%s"' % \
+                    (len(text_json), json_filename))
 
         if len(symbols) > 0:
             sym_filename = map_config['--noext'] + '.symbol'
             s = _dump_symbols(symbols)
             file_put_contents(sym_filename, s)
-            print 'wrote %d bytes to "%s"' % \
-                    (len(s), sym_filename)
+            print('wrote %d bytes to "%s"' % \
+                    (len(s), sym_filename))
 
         if len(lst_labels) > 0:
             labelsstring = '\n'.join(lst_labels)
             labels_filename = map_config['--noext'] + '.labels'
             file_put_contents(labels_filename, labelsstring)
-            print 'wrote %d bytes to "%s"' % \
-                    (len(labelsstring), labels_filename)
+            print('wrote %d bytes to "%s"' % \
+                    (len(labelsstring), labels_filename))
 
-    print
+    print()
 
 def _dump_opcode_bits():
     m = {}
-    for k,v in _get_kcpsm3_assembler()[1].iteritems():
+    for k,v in _get_kcpsm3_assembler()[1].items():
         m[v[0]] = k
 
-    print 'KCPSM3:'
+    print('KCPSM3:')
     for k in sorted(m):
-        print " %05X (18'b%s): %s"  % (k, ''.join(explode_18bits(k)), m[k])
+        print(" %05X (18'b%s): %s"  % (k, ''.join(explode_18bits(k)), m[k]))
 
     m = {}
-    for k,v in _get_kcpsm6_assembler()[1].iteritems():
+    for k,v in _get_kcpsm6_assembler()[1].items():
         m[v[0]] = k
 
-    print 'KCPSM6:'
+    print('KCPSM6:')
     for k in sorted(m):
-        print " %05X (18'b%s): %s"  % (k, ''.join(explode_18bits(k)), m[k])
+        print(" %05X (18'b%s): %s"  % (k, ''.join(explode_18bits(k)), m[k]))
 
 def print_usage(more=False):
-    print "usage: %s [option] [file]" % os.path.split(sys.argv[0])[1]
+    print("usage: %s [option] [file]" % os.path.split(sys.argv[0])[1])
     
-    print "  -h           print this help"
-    print "  -3           kcpsm3 mode"
-    print "  -6           kcpsm6 mode"
-    print "  -i <file>    Select input <file>"
-    print "  -o <file>    Place output into <file>, '-' is stdout"
-    print "      --psm    Output kcpsm3 assembly"
-    print "      --obj    Output kcpsm3 assembly object"
-    print "      --hex    Output kcpsm3 binary (hex)"
-    print "      --mem    Output kcpsm3 binary (mem)"
+    print("  -h           print this help")
+    print("  -3           kcpsm3 mode")
+    print("  -6           kcpsm6 mode")
+    print("  -i <file>    Select input <file>")
+    print("  -o <file>    Place output into <file>, '-' is stdout")
+    print("      --psm    Output kcpsm3 assembly")
+    print("      --obj    Output kcpsm3 assembly object")
+    print("      --hex    Output kcpsm3 binary (hex)")
+    print("      --mem    Output kcpsm3 binary (mem)")
     if not more:
         return
     
-    print "assembly feature:"
-    print "    1. digit"
-    print "        Support 3 format: 0(dec), [1-9]...(dec), 0x...(hex), 0...(oct)"
-    print ""
-    print "    2. macro"
-    print "        `include \"file.s\"           -   include other file"
-    print "        `define  macro   [value]    -   define macro"
-    print "        `undef   macro              -   undef macro"
-    print "        `nop                        -   wait one instruct"
-    print "        `cond (ra == rb),   L_TRUE, L_FALSE"
-    print "        `cond (ra == rb),   NULL, L_FALSE"
-    print "    3. embedded python code, modify macro value"
-    print "        ;#!python ...               -   embedded python code"
+    print("assembly feature:")
+    print("    1. digit")
+    print("        Support 3 format: 0(dec), [1-9]...(dec), 0x...(hex), 0...(oct)")
+    print("")
+    print("    2. macro")
+    print("        `include \"file.s\"           -   include other file")
+    print("        `define  macro   [value]    -   define macro")
+    print("        `undef   macro              -   undef macro")
+    print("        `nop                        -   wait one instruct")
+    print("        `cond (ra == rb),   L_TRUE, L_FALSE")
+    print("        `cond (ra == rb),   NULL, L_FALSE")
+    print("    3. embedded python code, modify macro value")
+    print("        ;#!python ...               -   embedded python code")
 
 
 if __name__ == '__main__':
     pblaze_as(sys.argv)
+
 
