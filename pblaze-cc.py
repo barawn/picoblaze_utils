@@ -1325,12 +1325,17 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         f.write('  %s' % code[0].replace('_', ' '))
                         f.write('\n')
                     elif code[0] in ['regbank']:
-                        if type(code[1][0]) != int or (code[1][0] != 0 and code[1][0] != 1):
-                            msg = 'regbank requires either 0/1: "%s"' % (str(line))
-                            raise ParseException(msg)
-                        f.write('  ' * level)
-                        f.write('  %s %s' % (code[0], 'A' if code[1][0] == 0 else 'B'))
-                        f.write('\n')
+                        print("typeof", type(code[1][0]))
+                        try:
+                            bank = int(code[1][0])
+                            if bank != 0 and bank != 1:
+                                msg = 'regbank requires either 0/1: "%s"' % (str(line))
+                                raise ParseException(msg)                            
+                            f.write('  ' * level)
+                            f.write('  %s %s' % (code[0], 'A' if bank == 0 else 'B'))
+                            f.write('\n')
+                        except Exception as e:
+                            raise e
                     elif code[0] in ['input', 'output', 'outputk', 'fetch', 'store']:
                         # check outputk
                         if code[0] == 'outputk':
