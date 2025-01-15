@@ -344,8 +344,8 @@ def parse_condition(info, line):
     # Note that if (a | b) is NOT representable in PicoBlaze.
     # you have to do a |= b, if (a).
     #
-    # But if (a & b) is representable by test Z,
-    # and if (a ^ b) is the complement of that (test NZ).
+    # But if (a & b) is representable by test NZ,
+    # and if (a ^ b) is the complement of that (test Z).
     res = re.match(r'(if|else if|while)\s*\((.+) (&|\^) (.+)\)', line)
     if res:
         cond    = res.groups()[0]
@@ -364,7 +364,7 @@ def parse_condition(info, line):
             info.lines.append([info.level, info.lineno, 'dowhile',
                 [compare, _parse_param(param0), _parse_param(param1)]])
             return True
-
+        
         info.lines.append([info.level, info.lineno, cond,
             [compare, _parse_param(param0), _parse_param(param1)]])
         return True
@@ -1414,7 +1414,35 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         
                     if super_verbose == True:
                         print("compare ", compare, " param0 ", param0, " param1 ", param1)
-
+                    # Readability hacks.
+                    # Also make more clear what's failing.
+                    # These operations aren't natively supported.
+                    if compare == '>' or compare == '<=':
+                        if super_verbose == True:
+                            print("Op %s is not natively supported" % compare)
+                            print("Trying to transform it.")
+                            print("Param0", param0, "type", type(param0))
+                            print("Param1", param1, "type", type(param1))
+                        # case str/str is register compare, we can't
+                        # do anything easily, we would need a double-flag
+                        if (type(param0) == str and \
+                            type(param1) == str):
+                            print("Register/register compare op", compare,
+                                  "cannot be trivially transformed")
+                        elif (type(param0) == str and \
+                              type(param1) == int):
+                            print("converting", "!" if inverted else "",
+                                  param0, compare, param1)
+                            param1 = param1 + 1
+                            if compare == '>':
+                                # this is sX > KK (e.g. val > 50)
+                                compare = '<'
+                                inverted = True if not inverted else False
+                            else:
+                                # this is sX <= KK (e.g. val <= 50)
+                                compare = '<'
+                            print("converted to", "!" if inverted else "",
+                                  param0, compare, param1)
                     #check if const value
                     if type(param0) == int and \
                             type(param1) == int:
@@ -1450,7 +1478,6 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     f.write('\n')
 
                     f.write('  ' * level)                        
-                                
                     if compare in ['==', '!=', '<', '>=']:
                         if param0 == 'Z' or param0 == 'C':
                             if super_verbose == True:
