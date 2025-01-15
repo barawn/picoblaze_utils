@@ -349,7 +349,7 @@ regex_register  = re.compile(r'[\(]?(s[0-9a-fA-F])[\)]?')
 
 regex_hex_digit = re.compile(r'0[xX][0-9a-fA-F]+')
 regex_oct_digit = re.compile(r'0[0-7]+')
-regex_dec_digit = re.compile(r'[1-9]+[0-9]*')
+regex_dec_digit = re.compile(r'[-]?[1-9]+[0-9]*')
 
 #format char: 'c' or '\n'
 regex_extract_char = re.compile(r'^\'' + r'([\\]?)' + r'(.)' + r'\'$')
@@ -636,7 +636,6 @@ def _preprocess_normal(instructions, lst_inner_asm, symbols):
         i += 1
 
     #end of for elem in instructions:
-
     lst_inner_asm.append(newinstructions)
 
 def _format_digit(inst, d):
@@ -820,6 +819,7 @@ def _parse_cond_flag6(opname, cond, cfg):
 def _assembly_alu(opcode, instruction, cfg):
     sX = instruction[1]
     sY = instruction[2]
+    # if you do something dumb you'll screw up here!
     KK = instruction[2]
 
     objhex = opcode
@@ -835,7 +835,8 @@ def _assembly_alu(opcode, instruction, cfg):
     objhex = objhex | (_parse_register_name(sX) << 8)
         
     if type(sY) == int:
-        objhex = objhex | KK
+        # if you do something dumb it'll be dumb here!!
+        objhex = objhex | (KK & 0xFF)
     elif type(sY) == bytes or type(sY) == str:
         objhex = objhex | (_parse_register_name(sY) << 4)
     else:
