@@ -1,6 +1,6 @@
 --
 -------------------------------------------------------------------------------------------
--- Copyright © 2010-2011, Xilinx, Inc.
+-- Copyright Â© 2010-2011, Xilinx, Inc.
 -- This file contains confidential and proprietary information of Xilinx, Inc. and is
 -- protected under U.S. and international copyright and other intellectual property laws.
 -------------------------------------------------------------------------------------------
@@ -94,6 +94,7 @@ entity kcpsm6 is
                       write_strobe : out std_logic;
                     k_write_strobe : out std_logic;
                        read_strobe : out std_logic;
+                              bank : out std_logic;
                          interrupt : in std_logic;
                      interrupt_ack : out std_logic;
                              sleep : in std_logic;
@@ -265,7 +266,7 @@ signal               spm_data : std_logic_vector(7 downto 0);
 --	 
 signal           regbank_type : std_logic;
 signal             bank_value : std_logic;
-signal                   bank : std_logic;
+--signal                   bank : std_logic;
 signal          loadstar_type : std_logic;
 signal         sx_addr4_value : std_logic;
 signal   register_enable_type : std_logic;
