@@ -53,7 +53,7 @@ IDX_CODE    = 3
 labels = []
 
 vivado_boot_fix = False
-super_verbose = True
+super_verbose = False
 
 class MetaInfo(object):
     def __init__(self):
@@ -689,7 +689,6 @@ def convert_list_to_block(info):
             res = re.match('__attribute__[ \t]*\(\((.+)\W*\((.+)\)\)\)', attributes)
             res2 = re.match('__attribute__\s*\(\(\s*(\w+)\s*\)\)', attributes)
             if res:
-                print("complex attribute match")
                 clear_attrs = []
                 attrs = res.groups()
                 for attr in attrs:
@@ -814,6 +813,88 @@ def dump_blocks(map_function, f=sys.stdout):
             dump_parse(block[1], no_title, f)
             no_title = True
 
+# try to find if/return/endif
+# and if/funccall/endif
+def condition_optimizer(map_function):
+    def get_transformable_block_type(b):
+        return b[1][0][2]
+
+    def set_transformable_block_type(b, t):
+        b[1][0][2] = t
+
+    def get_transformable_block_code(b):
+        return b[1][0][3]
+
+    def set_transformable_block_iflabel(b, f):
+        # third element is code, and 3 is label_t
+        b[1][0][3][3] = f
+        
+    for name in map_function:
+        lst_block = map_function[name]
+        idx = 0
+        stage = None
+        transformable = None
+        found_transformable = []
+        for block in lst_block:
+            if len(block[1]) != 1:
+                stage = None
+            else:
+                # check from back to front
+                t = get_transformable_block_type(block)
+                if stage == "endif":
+                    if t == "endif":
+                        transformable.append(block)
+                        found_transformable.append(transformable)
+                    else:
+                        stage = None
+                        transformable = None
+                if stage == "returnorfunc":
+                    if t == "return" or t == "funccall":
+                        if t == "funccall":
+                            code = get_transformable_block_code(block)
+                            # intrinsics take arguments,
+                            # other functions don't.
+                            # (if we ever add argument support
+                            #  we will expand code before this point!
+                            #  so this would become a multiline block!)
+                            if len(code) == 1:
+                                transformable.append(block)
+                                stage = "endif"
+                            else:
+                                stage = None
+                        else:
+                            transformable.append(block)
+                            stage = "endif"
+                    else:
+                        stage = None
+                        transformable = None
+                if stage == None:
+                    if t == "if":
+                        transformable = [block]
+                        stage = "returnorfunc"
+            idx = idx + 1
+        if len(found_transformable):
+            for t in found_transformable:
+                transformable_type = get_transformable_block_type(t[1])
+                if transformable_type == 'return':
+                    print("Found a transformable if (X) return:")
+                    print(t[0])
+                    print(t[1])
+                    print(t[2])
+                    set_transformable_block_type(t[0], "ifreturn")
+                    lst_block.remove(t[1])
+                    lst_block.remove(t[2])
+                elif transformable_type == 'funccall':
+                    code = get_transformable_block_code(t[1])
+                    print("Found a transformable if (X) %s():" % code[0])
+                    print(t[0])
+                    print(t[1])
+                    print(t[2])
+                    set_transformable_block_type(t[0], "ifcall")
+                    set_transformable_block_iflabel(t[0], code[0])
+                    lst_block.remove(t[1])
+                    lst_block.remove(t[2])
+        
 def convert_condition_to_ifgoto(map_function):
     #because 'if'/'do'/'while' is in single line block,
     #so easy to modify it.
@@ -1339,7 +1420,6 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         f.write('  %s' % code[0].replace('_', ' '))
                         f.write('\n')
                     elif code[0] in ['regbank']:
-                        print("typeof", type(code[1][0]))
                         try:
                             bank = int(code[1][0])
                             if bank != 0 and bank != 1:
@@ -1414,11 +1494,12 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         msg = 'Unknown instruction "%s"' % (str(line))
                         raise ParseException(msg)
 
-                elif t in ['if', 'else if', 'while', 'dowhile', 'singlewhile']:
+                elif t in ['if', 'else if', 'while', 'dowhile', 'singlewhile',
+                           'ifreturn', 'ifcall']:
                     compare = code[0]
                     param0  = code[1]
                     param1  = code[2]
-
+                    
                     inverted = False
                     if compare[0] == '$':
                         inverted = True
@@ -1616,7 +1697,20 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         raise ParseException(msg)
 
                     #optimize jump
-                    if idx_block + 1 < len(lst_block):
+                    # these optimizations are transformed blocks:
+                    # they're not condition jumps, they're conditional
+                    # returns or function calls.
+                    if t == 'ifreturn':
+                        f.write('  ' * level)
+                        f.write('  return %s' % flage_t)
+                        f.write('\n')
+                        continue
+                    elif t == 'ifcall':
+                        f.write('  ' * level)
+                        f.write('  call %s, %s' % (flage_t, label_t))
+                        f.write('\n')
+                        continue
+                    elif idx_block + 1 < len(lst_block):
                         next_block_label = lst_block[idx_block + 1][0]
                         #check jump-jump
                         label_bb = label_f
@@ -1998,6 +2092,10 @@ if __name__ == '__main__':
 
         #expand loop
         convert_condition_to_ifgoto2(map_function)
+        # NOTE NOTE NOTE
+        condition_optimizer(map_function)
+        # This is probably the point at which we can do the
+        # optimization.
         if '-g' in map_options:
             fn = '%s.pass2.tmp' % map_options['path_noext']
             f = open(fn, 'w')
