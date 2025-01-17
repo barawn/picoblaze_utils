@@ -1539,25 +1539,35 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             print("converted to", "!" if inverted else "",
                                   param0, compare, param1)
                     #check if const value
+                    # Wait, wait, this is insane. If it's constant
+                    # just convert it into either a nop or an unconditional jump. 
                     if type(param0) == int and \
                             type(param1) == int:
                         res = {'val':0}
                         text = 'val = %s %s %s' % (param0, compare, param1)
                         exec(text, {}, res)
                         if res['val'] == True or res['val'] != 0:
-                            param0  = 's0'
                             if inverted:
-                                compare = '!='
+                                compare = 'never'
                             else:
-                                compare = '=='
-                            param1  = 's0'
+                                compare = 'always'
+#                            param0  = 's0'
+#                            if inverted:
+#                                compare = '!='
+#                            else:
+#                                compare = '=='
+#                            param1  = 's0'
                         else:
-                            param0  = 's0'
                             if inverted:
-                                compare = '=='
+                                compare = "always"
                             else:
-                                compare = '!='
-                            param1  = 's0'
+                                compare = "never"
+#                            param0  = 's0'
+#                            if inverted:
+#                                compare = '=='
+#                            else:
+#                                compare = '!='
+#                            param1  = 's0'
                     elif type(param0) == int and \
                             type(param1) != int:
                         msg = 'Param0 must be register when Param1 is digit! "%s"' % \
@@ -1572,8 +1582,31 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                             (t, param0, compare, param1, label_t, label_f))
                     f.write('\n')
 
-                    f.write('  ' * level)                        
-                    if compare in ['==', '!=', '<', '>=']:
+                    f.write('  ' * level)
+                    # handle constants straight away
+                    if compare in ['always', 'never']:
+                        if t == 'ifreturn' or t == 'ifcall':
+                            if compare == 'never':
+                                f.write('  ' * level)
+                                f.write('  ; optimized away false %s' % t)
+                                f.write('\n')
+                                continue
+                            if t == 'ifreturn':
+                                f.write('  ' * level)
+                                f.write('  return')
+                                f.write('\n')                                
+                                continue
+                            if t == 'ifcall':
+                                f.write('  ' * level)
+                                f.write('  call %s' % label_t)
+                                f.write('\n')
+                                continue                            
+                        # ok so now it's an unconditional jump to either true or false
+                        f.write('  ' * level)
+                        f.write('  jump %s' % label_t if compare == 'always' else label_f)
+                        f.write('\n')
+                        continue
+                    elif compare in ['==', '!=', '<', '>=']:
                         if param0 == 'Z' or param0 == 'C':
                             if super_verbose == True:
                                 print("condition check: ", param0, compare, param1)
