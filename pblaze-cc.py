@@ -53,7 +53,7 @@ IDX_CODE    = 3
 labels = []
 
 vivado_boot_fix = False
-super_verbose = False
+super_verbose = True
 
 class MetaInfo(object):
     def __init__(self):
@@ -161,8 +161,8 @@ def prepare(info, line):
             break
         info.level += 1
 
-    info.level /= NR_SPACES_OF_TAB
-
+    info.level = int(info.level/NR_SPACES_OF_TAB)
+    
     line = re.sub(r'^[ \t]+', '', line)
 
     return line
