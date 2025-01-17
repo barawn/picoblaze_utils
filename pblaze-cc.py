@@ -468,6 +468,19 @@ def parse_label(info, line):
                            [name, ret, params, attributes]])
         return True
 
+def parse_goto(info, line):
+    res = re.match(r'goto \s*(\w+)\s*;', line)
+    if res:
+        if super_verbose == True:
+            print("found goto")
+        ret = None
+        name = res.groups()[0]
+        params = None
+        attributes = None
+        info.lines.append([info.level, info.lineno, 'goto',
+                           [name, ret, params, attributes]])
+        return True
+    
 def parse_funcdecl(info, line):
     if super_verbose == True:
         print("Parsing %s" % line)
@@ -556,7 +569,8 @@ def parse(text):
             parse_funcdecl,
             parse_funcdef,
             parse_funccall,
-            parse_label
+            parse_label,
+            parse_goto
     ]
 
     #parse codes
@@ -571,7 +585,7 @@ def parse(text):
         #try all know parser
         unknown = True
         for parser in lst_parser:
-            #print parser.__name__
+            #print(parser.__name__)
             if parser(info, line):
                 unknown = False
                 break
@@ -695,7 +709,7 @@ def convert_list_to_block(info):
                     print("Function '%s' with attribute noreturn, adding to label list" % name)
                     labels.append(name)
             else:
-                msg = 'Unknow attribute format "%s"' % attribute
+                msg = 'Unknown attribute format "%s"' % attributes
                 raise ParseException(msg)
         elif t == 'funcdef':
             name = code[0]
