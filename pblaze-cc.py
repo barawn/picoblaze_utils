@@ -1734,13 +1734,15 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     # they're not condition jumps, they're conditional
                     # returns or function calls.
                     if t == 'ifreturn':
+                        condition = flage_t if not inverted else flage_f
                         f.write('  ' * level)
-                        f.write('  return %s' % flage_t)
+                        f.write('  return %s' % condition)
                         f.write('\n')
                         continue
                     elif t == 'ifcall':
+                        condition = flage_t if not inverted else flage_f
                         f.write('  ' * level)
-                        f.write('  call %s, %s' % (flage_t, label_t))
+                        f.write('  call %s, %s' % (condition, label_t))
                         f.write('\n')
                         continue
                     elif idx_block + 1 < len(lst_block):
