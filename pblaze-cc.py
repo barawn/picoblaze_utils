@@ -835,6 +835,10 @@ def condition_optimizer(map_function):
         stage = None
         transformable = None
         found_transformable = []
+        transformable_map = {
+            "return" : "ifreturn",
+            "funccall" : "ifcall",
+            "goto" : "ifgoto" };
         for block in lst_block:
             if len(block[1]) != 1:
                 stage = None
@@ -848,8 +852,8 @@ def condition_optimizer(map_function):
                     else:
                         stage = None
                         transformable = None
-                if stage == "returnorfunc":
-                    if t == "return" or t == "funccall":
+                if stage == "block":
+                    if t in transformable_map.keys():
                         if t == "funccall":
                             code = get_transformable_block_code(block)
                             # intrinsics take arguments,
@@ -871,26 +875,30 @@ def condition_optimizer(map_function):
                 if stage == None:
                     if t == "if":
                         transformable = [block]
-                        stage = "returnorfunc"
+                        stage = "block"
             idx = idx + 1
         if len(found_transformable):
             for t in found_transformable:
                 transformable_type = get_transformable_block_type(t[1])
+                set_transformable_block_type(t[0],
+                                             transformable_map[transformable_type])
                 if transformable_type == 'return':
                     print("Found a transformable if (X) return:")
                     print(t[0])
                     print(t[1])
                     print(t[2])
-                    set_transformable_block_type(t[0], "ifreturn")
                     lst_block.remove(t[1])
                     lst_block.remove(t[2])
-                elif transformable_type == 'funccall':
+                elif transformable_type == 'funccall' or transformable_type == 'goto':
                     code = get_transformable_block_code(t[1])
-                    print("Found a transformable if (X) %s():" % code[0])
+                    if transformable_type == 'funccall':
+                        codeStr = "%s()" % code[0]
+                    elif transformable_type == 'goto':
+                        codeStr = "goto %s" % code[0]
+                    print("Found a transformable if (X) %s:" % codeStr)
                     print(t[0])
                     print(t[1])
                     print(t[2])
-                    set_transformable_block_type(t[0], "ifcall")
                     set_transformable_block_iflabel(t[0], code[0])
                     lst_block.remove(t[1])
                     lst_block.remove(t[2])
@@ -1495,7 +1503,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         raise ParseException(msg)
 
                 elif t in ['if', 'else if', 'while', 'dowhile', 'singlewhile',
-                           'ifreturn', 'ifcall']:
+                           'ifreturn', 'ifcall', 'ifgoto']:
                     compare = code[0]
                     param0  = code[1]
                     param1  = code[2]
@@ -1585,7 +1593,7 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                     f.write('  ' * level)
                     # handle constants straight away
                     if compare in ['always', 'never']:
-                        if t == 'ifreturn' or t == 'ifcall':
+                        if t == 'ifreturn' or t == 'ifcall' or t == 'ifgoto':
                             if compare == 'never':
                                 f.write('  ' * level)
                                 f.write('  ; optimized away false %s' % t)
@@ -1596,11 +1604,13 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                 f.write('  return')
                                 f.write('\n')                                
                                 continue
-                            if t == 'ifcall':
+                            # n.b. we ALWAYS use label_t here regardless of inverted or not
+                            if t == 'ifcall' or t == 'ifgoto':
+                                opStr = 'call' if t == 'ifcall' else 'jump'
                                 f.write('  ' * level)
-                                f.write('  call %s' % label_t)
+                                f.write('  %s %s' % (opStr, label_t))
                                 f.write('\n')
-                                continue                            
+                                continue
                         # ok so now it's an unconditional jump to either true or false
                         f.write('  ' * level)
                         f.write('  jump %s' % label_t if compare == 'always' else label_f)
@@ -1739,10 +1749,12 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                         f.write('  return %s' % condition)
                         f.write('\n')
                         continue
-                    elif t == 'ifcall':
+                    elif t == 'ifcall' or t == 'ifgoto':
+                        # ifcalls just map to 
+                        opStr = 'call' if t == 'ifcall' else 'jump'
                         condition = flage_t if not inverted else flage_f
                         f.write('  ' * level)
-                        f.write('  call %s, %s' % (condition, label_t))
+                        f.write('  %s %s, %s' % (opStr, condition, label_t))
                         f.write('\n')
                         continue
                     elif idx_block + 1 < len(lst_block):
