@@ -1864,6 +1864,9 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                     f.write('  subcy %s, %s' % (regs[num], str(operands[num])))
                                 f.write('\n')
                         elif assign_type == '<<=':
+                            # shift UP s0.s1 means we do
+                            # sl0 s1
+                            # sla s0
                             if type(operands[0]) == str:
                                 msg = 'Shifts must be a constant value'
                                 raise ParseException(msg)
@@ -1877,10 +1880,14 @@ def generate_assembly(map_function, map_attribute, f=sys.stdout):
                                     f.write('\n')
                                 param1 -= 1
                         elif assign_type == '>>=':
+                            # shift DOWN s0.s1 means we do
+                            # sr0 s0
+                            # sra s1
+                            regs.reverse()
                             if type(operands[0]) == str:
                                 msg = 'Shifts must be a constant value'
                                 raise ParseException(msg)
-                            while param1 > 0:
+                            while param1 > 0:                                
                                 for num in range(nregs):
                                     f.write('  ' * level)
                                     if num == 0:
